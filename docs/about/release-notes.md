@@ -20,20 +20,11 @@ status: published
 
 # Release Notes
 
-## 0.1.0 Unreleased
+NVIDIA NemoClaw is in active development and follows a frequent release cadence. Use the following GitHub resources directly.
 
-Initial release of NemoClaw.
-
-### Features
-
-- `openclaw nemoclaw launch`. Fresh install of OpenClaw inside an OpenShell sandbox.
-- `openclaw nemoclaw migrate`. Migrate an existing host OpenClaw installation into a sandbox with automatic snapshot creation.
-- `nemoclaw <name> connect`. Interactive shell into the running sandbox.
-- `openclaw nemoclaw status`. Show sandbox health, blueprint run state, and inference configuration.
-- `openclaw nemoclaw logs`. Stream blueprint execution and sandbox logs.
-- `openclaw nemoclaw eject`. Roll back from sandbox to the host installation using a snapshot.
-- `/nemoclaw` slash command for in-chat status and eject.
-- Blueprint system with version resolution, digest verification, and profile support.
-- Three inference profiles: NVIDIA cloud with Nemotron 3 Super 120B, local NIM, and vLLM.
-- Strict baseline network and filesystem policy defined in `openclaw-sandbox.yaml`.
-- Brev deployment support through `nemoclaw deploy`.
+| Resource | Description |
+|---|---|
+| [Releases](https://github.com/NVIDIA/NemoClaw/releases) | Versioned release notes and downloadable assets. |
+| [Release comparison](https://github.com/NVIDIA/NemoClaw/compare) | Diff between any two tags or branches. |
+| [Merged pull requests](https://github.com/NVIDIA/NemoClaw/pulls?q=is%3Apr+is%3Amerged) | Individual changes with review discussion. |
+| [Commit history](https://github.com/NVIDIA/NemoClaw/commits/main) | Full commit log on `main`. |

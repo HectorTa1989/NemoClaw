@@ -34,18 +34,16 @@ nemoclaw/
 │   ├── cli.ts                      Commander.js subcommand wiring
 │   ├── commands/
 │   │   ├── launch.ts               Fresh install into OpenShell
-│   │   ├── migrate.ts              Migrate host OpenClaw into sandbox
 │   │   ├── connect.ts              Interactive shell into sandbox
 │   │   ├── status.ts               Blueprint run state + sandbox health
 │   │   ├── logs.ts                 Stream blueprint and sandbox logs
-│   │   ├── eject.ts                Rollback to host install from snapshot
 │   │   └── slash.ts                /nemoclaw chat command handler
 │   └── blueprint/
 │       ├── resolve.ts              Version resolution, cache management
 │       ├── fetch.ts                Download blueprint from OCI registry
 │       ├── verify.ts               Digest verification, compatibility checks
 │       ├── exec.ts                 Subprocess execution of blueprint runner
-│       └── state.ts                Persistent state (run IDs, snapshots)
+│       └── state.ts                Persistent state (run IDs)
 ├── openclaw.plugin.json            Plugin manifest
 └── package.json                    Commands declared under openclaw.extensions
 ```
@@ -60,11 +58,9 @@ The blueprint drives all interactions with the OpenShell CLI.
 nemoclaw-blueprint/
 ├── blueprint.yaml                  Manifest — version, profiles, compatibility
 ├── orchestrator/
-│   └── runner.py                   CLI runner — plan / apply / status / rollback
+│   └── runner.py                   CLI runner — plan / apply / status
 ├── policies/
 │   └── openclaw-sandbox.yaml       Strict baseline network + filesystem policy
-└── migrations/
-    └── snapshot.py                 Snapshot / restore / cutover / rollback logic
 ```
 
 ### Blueprint Lifecycle
@@ -75,14 +71,13 @@ flowchart LR
     B --> C[plan]
     C --> D[apply]
     D --> E[status]
-    D --> F[rollback]
 ```
 
 1. Resolve. The plugin locates the blueprint artifact and checks the version against `min_openshell_version` and `min_openclaw_version` constraints in `blueprint.yaml`.
 2. Verify. The plugin checks the artifact digest against the expected value.
 3. Plan. The runner determines what OpenShell resources to create or update, such as the gateway, providers, sandbox, inference route, and policy.
 4. Apply. The runner executes the plan by calling `openshell` CLI commands.
-5. Status / Rollback. The runner reports current state or rolls back to a snapshot.
+5. Status. The runner reports current state.
 
 ## Sandbox Environment
 

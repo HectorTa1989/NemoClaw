@@ -48,6 +48,8 @@ exclude_patterns = [
     "_ext/**",
 ]
 
+suppress_warnings = ["myst.header"]
+
 myst_linkify_fuzzy_links = False
 myst_heading_anchors = 4
 myst_enable_extensions = [

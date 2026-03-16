@@ -168,7 +168,7 @@ Egress control, operator approval flow, and policy configuration.
 :link: inference/switch-inference-providers
 :link-type: doc
 
-Task-oriented guides for inference, migration, deployment, and policy management.
+Task-oriented guides for inference, deployment, and policy management.
 
 +++
 {bdg-secondary}`How-To`
@@ -205,14 +205,6 @@ Quickstart <get-started/quickstart>
 Switch Inference Providers <inference/switch-inference-providers>
 Set Up Local vLLM <inference/set-up-local-vllm>
 Set Up a Local NIM Service <inference/set-up-local-nim>
-```
-
-```{toctree}
-:caption: Migration
-:hidden:
-
-Migrate OpenClaw to a Sandbox <migration/migrate-openclaw-to-sandbox>
-Roll Back a Migration <migration/roll-back-migration>
 ```
 
 ```{toctree}

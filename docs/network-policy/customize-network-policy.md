@@ -30,7 +30,7 @@ NemoClaw supports both static policy changes that persist across restarts and dy
 
 ## Static Changes
 
-Static changes modify the baseline policy file and take effect after the next migration.
+Static changes modify the baseline policy file and take effect after the next setup.
 
 ### Edit the Policy File
 
@@ -47,15 +47,15 @@ Each entry in the `network` section defines an endpoint group with the following
 `rules`
 : HTTP methods and paths that are permitted.
 
-### Re-Run the Migration
+### Re-Run Setup
 
-Apply the updated policy by re-running the migration:
+Apply the updated policy by re-running setup:
 
 ```console
-$ openclaw nemoclaw migrate
+$ nemoclaw setup
 ```
 
-The migration picks up the modified policy file and applies it to the sandbox.
+Setup picks up the modified policy file and applies it to the sandbox.
 
 ### Verify the Policy
 
@@ -88,7 +88,7 @@ The change takes effect immediately.
 
 Dynamic changes apply only to the current session.
 When the sandbox stops, the running policy resets to the baseline defined in the policy file.
-To make changes permanent, update the static policy file and re-run the migration.
+To make changes permanent, update the static policy file and re-run setup.
 
 ## Related Topics
 

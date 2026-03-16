@@ -2,7 +2,7 @@
 title:
   page: "How NemoClaw Works — Plugin, Blueprint, and Sandbox Lifecycle"
   nav: "How It Works"
-description: "Plugin, blueprint, sandbox creation, inference routing, and rollback concepts."
+description: "Plugin, blueprint, sandbox creation, and inference routing concepts."
 keywords: ["how nemoclaw works", "nemoclaw sandbox lifecycle blueprint"]
 topics: ["generative_ai", "ai_agents"]
 tags: ["openclaw", "openshell", "sandboxing", "inference_routing", "blueprints", "network_policy"]
@@ -36,7 +36,7 @@ This separation keeps the plugin small and stable while allowing the blueprint t
 
 ## Sandbox Creation
 
-When you run `openclaw nemoclaw launch` or `openclaw nemoclaw migrate`, NemoClaw creates an OpenShell sandbox that runs OpenClaw in an isolated container.
+When you run `openclaw nemoclaw launch`, NemoClaw creates an OpenShell sandbox that runs OpenClaw in an isolated container.
 The blueprint orchestrates this process through the OpenShell CLI:
 
 1. The plugin downloads the blueprint artifact, checks version compatibility, and verifies the digest.
@@ -68,14 +68,6 @@ This policy controls which network endpoints the agent can reach and which files
   All other system paths are read-only.
 
 Approved endpoints persist for the current session but are not saved to the baseline policy file.
-
-## Migration and Rollback
-
-If you already have OpenClaw installed on the host, the `migrate` command moves it into a sandbox.
-Before making any changes, NemoClaw creates a snapshot of your current state.
-
-The `eject` command reverses the migration by restoring the snapshot and removing the sandbox.
-This returns your system to the exact state before the migration.
 
 ## Next Steps
 

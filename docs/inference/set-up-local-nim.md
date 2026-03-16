@@ -96,14 +96,10 @@ No additional policy changes are required.
 
 ## Select the NIM Profile at Launch
 
-To start a new sandbox with the `nim-local` profile, pass `--profile nim-local` during launch or migration:
+To start a new sandbox with the `nim-local` profile, pass `--profile nim-local` during launch:
 
 ```console
 $ openclaw nemoclaw launch --profile nim-local
-```
-
-```console
-$ openclaw nemoclaw migrate --profile nim-local
 ```
 
 ## Related Topics

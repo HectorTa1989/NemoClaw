@@ -95,12 +95,12 @@ NemoClaw installs the NVIDIA OpenShell runtime and Nemotron models, then uses a 
 
 | Component        | Role                                                                                      |
 |------------------|-------------------------------------------------------------------------------------------|
-| **Plugin**       | TypeScript CLI commands for launch, migrate, connect, status, logs, and eject.            |
+| **Plugin**       | TypeScript CLI commands for launch, connect, status, and logs.                            |
 | **Blueprint**    | Versioned Python artifact that orchestrates sandbox creation, policy, and inference setup. |
 | **Sandbox**      | Isolated OpenShell container running OpenClaw with policy-enforced egress and filesystem.  |
 | **Inference**    | NVIDIA-routed model calls (cloud, local NIM, or vLLM), transparent to the agent.          |
 
-The blueprint lifecycle follows five stages: resolve the artifact, verify its digest, plan the resources, apply through the OpenShell CLI, and report status or rollback from a snapshot.
+The blueprint lifecycle follows four stages: resolve the artifact, verify its digest, plan the resources, and apply through the OpenShell CLI.
 
 When something goes wrong, errors may originate from either NemoClaw or the OpenShell layer underneath. Run `nemoclaw <name> status` for NemoClaw-level health and `openshell sandbox list` to check the underlying sandbox state.
 
@@ -155,15 +155,12 @@ Run these inside the OpenClaw CLI. These commands are under active development a
 | Command                                    | Description                                              |
 |--------------------------------------------|----------------------------------------------------------|
 | `openclaw nemoclaw launch [--profile ...]` | Bootstrap OpenClaw inside an OpenShell sandbox.          |
-| `openclaw nemoclaw migrate [--dry-run]`    | Migrate a host OpenClaw installation into a sandbox. |
 | `openclaw nemoclaw status`                 | Show sandbox health, blueprint state, and inference.     |
 | `openclaw nemoclaw logs [-f]`              | Stream blueprint execution and sandbox logs.             |
-| `openclaw nemoclaw eject`                  | Roll back to the host installation from a snapshot.      |
 
 See the full [CLI reference](https://docs.nvidia.com/nemoclaw/latest/reference/commands.md) for all commands, flags, and options.
 
 > **Known limitations:**
-> - The `openclaw nemoclaw migrate` command is not yet functional. New installs through `nemoclaw setup` work end-to-end.
 > - The `openclaw nemoclaw` plugin commands are under active development. Use the `nemoclaw` host CLI as the primary interface.
 > - Setup may require manual workarounds on some platforms. File an issue if you encounter blockers.
 

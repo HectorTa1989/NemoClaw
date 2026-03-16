@@ -89,14 +89,10 @@ $ openclaw agent --agent main --local -m "Hello, are you running locally?" --ses
 
 ## Select the vLLM Profile at Launch
 
-To start a new sandbox with the vLLM profile from the beginning, pass `--profile vllm` during launch or migration:
+To start a new sandbox with the vLLM profile from the beginning, pass `--profile vllm` during launch:
 
 ```console
 $ openclaw nemoclaw launch --profile vllm
-```
-
-```console
-$ openclaw nemoclaw migrate --profile vllm
 ```
 
 ## Related Topics

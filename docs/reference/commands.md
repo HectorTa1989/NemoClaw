@@ -30,7 +30,7 @@ Both interfaces are installed when you run `npm install -g nemoclaw`.
 ### `openclaw nemoclaw launch`
 
 Bootstrap OpenClaw inside an OpenShell sandbox.
-If NemoClaw detects an existing host installation, `launch` stops and points you to `openclaw nemoclaw migrate` unless you pass `--force`.
+If NemoClaw detects an existing host installation, `launch` stops unless you pass `--force`.
 
 ```console
 $ openclaw nemoclaw launch [--force] [--profile <profile>]
@@ -42,24 +42,6 @@ $ openclaw nemoclaw launch [--force] [--profile <profile>]
 
 `--profile <profile>`
 : Blueprint profile to use. Default: `default`.
-
-### `openclaw nemoclaw migrate`
-
-Migrate an existing host OpenClaw installation into an OpenShell sandbox.
-The command snapshots the resolved OpenClaw state, captures external agent roots referenced by config, preserves symlinks in tar archives, and verifies the migrated paths inside the sandbox.
-
-```console
-$ openclaw nemoclaw migrate [--dry-run] [--profile <profile>] [--skip-backup]
-```
-
-`--dry-run`
-: Show what would be migrated without making changes.
-
-`--profile <profile>`
-: Blueprint profile to use. Default: `default`.
-
-`--skip-backup`
-: Skip creating a host backup snapshot before migration.
 
 ### `nemoclaw <name> connect`
 
@@ -97,20 +79,6 @@ $ openclaw nemoclaw logs [-f] [-n <count>] [--run-id <id>]
 `--run-id <id>`
 : Show logs for a specific blueprint run instead of the latest.
 
-### `openclaw nemoclaw eject`
-
-Roll back from the sandbox and restore the host OpenClaw installation from a snapshot.
-
-```console
-$ openclaw nemoclaw eject [--run-id <id>] [--confirm]
-```
-
-`--run-id <id>`
-: Specific blueprint run ID to rollback from. Without this, uses the most recent run.
-
-`--confirm`
-: Skip the confirmation prompt.
-
 ### `/nemoclaw` Slash Command
 
 The `/nemoclaw` slash command is available inside the OpenClaw chat interface for quick actions:
@@ -118,7 +86,6 @@ The `/nemoclaw` slash command is available inside the OpenClaw chat interface fo
 | Subcommand | Description |
 |---|---|
 | `/nemoclaw status` | Show sandbox and inference state |
-| `/nemoclaw eject` | Show rollback instructions |
 
 ## Standalone Wrapper Commands
 

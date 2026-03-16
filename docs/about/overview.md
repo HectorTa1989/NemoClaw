@@ -27,7 +27,7 @@ It moves OpenClaw into a sandboxed environment where every network request, file
 
 - Sandboxes OpenClaw. Creates an OpenShell sandbox pre-configured for OpenClaw, with strict filesystem and network policies applied from the first boot.
 - Routes inference through NVIDIA. Configures OpenShell inference routing so agent traffic flows through cloud-hosted Nemotron 3 Super 120B, a local NIM service, or vLLM, depending on the selected profile.
-- Manages the lifecycle. Handles migration from a host-installed OpenClaw, snapshot-based rollback, blueprint versioning, and digest verification.
+- Manages the lifecycle. Handles blueprint versioning, digest verification, and sandbox setup.
 
 ## How It Fits Together
 
@@ -37,7 +37,7 @@ It delegates heavy lifting to a versioned blueprint, a Python artifact that orch
 ```{mermaid}
 flowchart TB
     subgraph Host
-        CMD["openclaw nemoclaw launch / migrate"]
+        CMD["openclaw nemoclaw launch"]
         PLUGIN[nemoclaw plugin]
         BLUEPRINT[blueprint runner]
         CLI["openshell CLI\nsandbox · gateway · inference · policy"]
@@ -88,5 +88,5 @@ OpenShell-native for new installs
 : For users without an existing OpenClaw installation, NemoClaw recommends `openshell sandbox create` directly
   rather than forcing a plugin-driven bootstrap.
 
-Snapshot everything
-: Every migration creates a restorable backup. Ejecting rolls back to the exact pre-migration state.
+Reproducible setup
+: Running setup again recreates the sandbox from the same blueprint and policy definitions.

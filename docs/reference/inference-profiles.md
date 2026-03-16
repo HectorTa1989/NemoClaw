@@ -97,11 +97,10 @@ $ openshell inference set --provider vllm-local --model nvidia/nemotron-3-nano-3
 
 ## Selecting a Profile at Launch
 
-Pass `--profile` when launching or migrating to select a profile:
+Pass `--profile` when launching to select a profile:
 
 ```console
 $ openclaw nemoclaw launch --profile vllm
-$ openclaw nemoclaw migrate --profile nim-local
 ```
 
 ## Switching Profiles at Runtime
