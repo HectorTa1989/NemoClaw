@@ -77,7 +77,7 @@ Install the CLI and launch a sandboxed OpenClaw instance in a few commands.
     <span class="nc-term-dot nc-term-dot-g"></span>
   </div>
   <div class="nc-term-body">
-    <div><span class="nc-ps">$ </span>curl -fsSL https://nvidia.com/nemoclaw.sh | bash</div>
+    <div><span class="nc-ps">$ </span>curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash</div>
   </div>
 </div>
 ```

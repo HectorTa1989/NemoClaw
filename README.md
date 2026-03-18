@@ -57,7 +57,7 @@ Download and run the installer script.
 The script installs Node.js if it is not already present, then runs the guided onboard wizard to create a sandbox, configure inference, and apply security policies.
 
 ```console
-$ curl -fsSL https://nvidia.com/nemoclaw.sh | bash
+$ curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 ```
 
 If you use nvm or fnm to manage Node.js, the installer may not update your current shell's PATH.
