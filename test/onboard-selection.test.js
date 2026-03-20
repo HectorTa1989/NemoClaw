@@ -29,7 +29,7 @@ const updates = [];
 credentials.prompt = async (message) => {
   promptCalls += 1;
   messages.push(message);
-  return "";
+  return "1";
 };
 credentials.ensureApiKey = async () => {};
 runner.runCapture = (command) => {
@@ -80,5 +80,93 @@ const { setupNim } = require(${onboardPath});
     assert.ok(payload.lines.some((line) => line.includes("Detected local inference option")));
     assert.ok(payload.lines.some((line) => line.includes("Press Enter to keep the cloud default")));
     assert.ok(payload.lines.some((line) => line.includes("Cloud models:")));
+  });
+
+  it("offers Local NIM when a NIM-capable NVIDIA GPU is detected", () => {
+    const repoRoot = path.join(__dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-selection-nim-"));
+    const scriptPath = path.join(tmpDir, "selection-check-nim.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+    const credentialsPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "credentials.js"));
+    const runnerPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "runner.js"));
+    const registryPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "registry.js"));
+    const nimPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "nim.js"));
+    const script = String.raw`
+const credentials = require(${credentialsPath});
+const runner = require(${runnerPath});
+const registry = require(${registryPath});
+const nim = require(${nimPath});
+
+let promptCalls = 0;
+const messages = [];
+const updates = [];
+
+credentials.prompt = async (message) => {
+  promptCalls += 1;
+  messages.push(message);
+  return "1";
+};
+credentials.ensureApiKey = async () => {};
+runner.runCapture = (command) => {
+  if (command.includes("command -v ollama")) return "";
+  if (command.includes("localhost:11434/api/tags")) return "";
+  if (command.includes("localhost:8000/v1/models")) return "";
+  return "";
+};
+nim.assessNimModels = () => [{
+  model: { name: "nvidia/nemotron-3-nano-30b-a3b", recommendedFor: ["general", "tool-use"] },
+  status: "recommended",
+  reason: "Recommended for this machine via 1x l40s FP8, 32 GB disk."
+}];
+nim.pullNimImage = () => "nvcr.io/nim/nvidia/nemotron-3-nano:latest";
+nim.startNimContainer = () => "nemoclaw-nim-selection-test";
+nim.waitForNimHealth = () => true;
+nim.resolveRunningNimModel = () => "nvidia/nemotron-3-nano";
+registry.updateSandbox = (_name, update) => updates.push(update);
+
+const { setupNim } = require(${onboardPath});
+
+(async () => {
+  const originalLog = console.log;
+  const lines = [];
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    const result = await setupNim("selection-test", {
+      type: "nvidia",
+      count: 1,
+      totalMemoryMB: 46068,
+      perGpuMB: 46068,
+      family: "l40s",
+      families: ["l40s"],
+      freeDiskGB: 120,
+      nimCapable: true,
+    });
+    originalLog(JSON.stringify({ result, promptCalls, messages, updates, lines }));
+  } finally {
+    console.log = originalLog;
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+    fs.writeFileSync(scriptPath, script);
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.result.provider, "nim-local");
+    assert.equal(payload.result.model, "nvidia/nemotron-3-nano");
+    assert.equal(payload.promptCalls, 2);
+    assert.ok(payload.lines.some((line) => line.includes("Detected local inference option: NIM")));
+    assert.ok(payload.lines.some((line) => line.includes("Local NIM container (NVIDIA GPU)")));
   });
 });

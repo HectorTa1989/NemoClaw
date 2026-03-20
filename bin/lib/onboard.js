@@ -552,16 +552,16 @@ async function setupNim(sandboxName, gpu) {
   const vllmRunning = !!runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", { ignoreError: true });
   const requestedProvider = isNonInteractive() ? getNonInteractiveProvider() : null;
   const requestedModel = isNonInteractive() ? getNonInteractiveModel(requestedProvider || "cloud") : null;
-  // Build options list — only show local options with NEMOCLAW_EXPERIMENTAL=1
+  // Build options list
   const options = [];
-  if (EXPERIMENTAL && gpu && gpu.nimCapable) {
-    options.push({ key: "nim", label: "Local NIM container (NVIDIA GPU) [experimental]" });
+  if (gpu && gpu.nimCapable) {
+    options.push({ key: "nim", label: "Local NIM container (NVIDIA GPU)" });
   }
   options.push({
     key: "cloud",
     label:
       "NVIDIA Cloud API (build.nvidia.com)" +
-      (!ollamaRunning && !(EXPERIMENTAL && vllmRunning) ? " (recommended)" : ""),
+      (!ollamaRunning && !(gpu && gpu.nimCapable) && !(EXPERIMENTAL && vllmRunning) ? " (recommended)" : ""),
   });
   if (hasOllama || ollamaRunning) {
     options.push({
@@ -596,6 +596,7 @@ async function setupNim(sandboxName, gpu) {
       console.log(`  [non-interactive] Provider: ${selected.key}`);
     } else {
       const suggestions = [];
+      if (gpu && gpu.nimCapable) suggestions.push("NIM");
       if (vllmRunning) suggestions.push("vLLM");
       if (ollamaRunning) suggestions.push("Ollama");
       if (suggestions.length > 0) {
