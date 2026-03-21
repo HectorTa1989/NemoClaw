@@ -56,6 +56,7 @@ describe("runner helpers", () => {
   it("preserves process env when opts.env is provided", () => {
     const calls = [];
     const originalSpawnSync = childProcess.spawnSync;
+    const originalPath = process.env.PATH;
     childProcess.spawnSync = (...args) => {
       calls.push(args);
       return { status: 0 };
@@ -67,6 +68,11 @@ describe("runner helpers", () => {
       process.env.PATH = "/usr/local/bin:/usr/bin";
       run("echo test", { env: { OPENSHELL_CLUSTER_IMAGE: "ghcr.io/nvidia/openshell/cluster:0.0.12" } });
     } finally {
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
       childProcess.spawnSync = originalSpawnSync;
       delete require.cache[require.resolve(runnerPath)];
     }
