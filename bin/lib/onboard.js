@@ -346,18 +346,55 @@ async function preflight() {
   // Cgroup v2 — must be configured for cgroupns=host
   const cgroup = checkCgroupConfig({ runtime });
   if (!cgroup.ok) {
-    console.error("");
-    console.error("  !! cgroup v2 detected but Docker is not configured for cgroupns=host.");
-    console.error("     OpenShell's gateway runs k3s inside Docker, which will fail with:");
-    console.error("");
-    console.error("       openat2 /sys/fs/cgroup/kubepods/pids.max: no such file or directory");
-    console.error("");
-    console.error("     To fix:");
-    console.error("");
-    console.error(`       ${cgroup.fix}`);
-    console.error("");
-    console.error(`     Detail: ${cgroup.reason}`);
-    process.exit(1);
+    console.log("");
+    console.log("  !! cgroup v2 detected but Docker is not configured for cgroupns=host.");
+    console.log("     OpenShell's gateway runs k3s inside Docker, which will fail with:");
+    console.log("");
+    console.log("       openat2 /sys/fs/cgroup/kubepods/pids.max: no such file or directory");
+    console.log("");
+
+    if (runtime === "colima") {
+      // Colima — auto-fix by restarting with the flag
+      console.log("  Fixing: restarting Colima with --cgroupns-mode host...");
+      const colResult = spawnSync("bash", ["-lc", "colima stop && colima start --cgroupns-mode host"], {
+        stdio: "inherit",
+        timeout: 120000,
+      });
+      if (colResult.status !== 0) {
+        console.error("  Failed to restart Colima. Please run manually:");
+        console.error("    colima stop && colima start --cgroupns-mode host");
+        process.exit(1);
+      }
+      console.log("  ✓ Colima restarted with cgroupns=host");
+    } else if (runtime === "docker-desktop") {
+      // Docker Desktop — can't automate GUI settings
+      console.error('     Open Docker Desktop → Settings → Docker Engine → add:');
+      console.error('');
+      console.error('       "default-cgroupns-mode": "host"');
+      console.error('');
+      console.error('     Then click "Apply & restart" and re-run nemoclaw onboard.');
+      process.exit(1);
+    } else {
+      // Linux — auto-fix via setup-spark
+      console.log("  Fixing: running setup-spark to configure Docker for cgroupns=host...");
+      const sparkResult = spawnSync("sudo", ["-E", "bash", path.join(SCRIPTS, "setup-spark.sh")], {
+        stdio: "inherit",
+        timeout: 120000,
+      });
+      if (sparkResult.status !== 0) {
+        console.error("  Failed to configure Docker. Please run manually:");
+        console.error("    sudo nemoclaw setup-spark");
+        process.exit(1);
+      }
+      console.log("  ✓ Docker configured for cgroupns=host");
+    }
+
+    // Re-verify after auto-fix
+    const recheck = checkCgroupConfig({ runtime });
+    if (!recheck.ok) {
+      console.error(`  !! Fix applied but cgroup check still failing: ${recheck.reason}`);
+      process.exit(1);
+    }
   }
   console.log("  ✓ cgroup configuration OK");
 
