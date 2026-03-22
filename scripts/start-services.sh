@@ -144,7 +144,13 @@ do_start() {
       node "$REPO_DIR/scripts/telegram-bridge.js"
   fi
 
-  # 3. cloudflared tunnel
+  # Discord bridge (only if token provided)
+  if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
+    SANDBOX_NAME="$SANDBOX_NAME" start_service discord-bridge \
+      node "$REPO_DIR/scripts/discord-bridge.js"
+  fi
+
+  # cloudflared tunnel
   if command -v cloudflared > /dev/null 2>&1; then
     start_service cloudflared \
       cloudflared tunnel --url "http://localhost:$DASHBOARD_PORT"

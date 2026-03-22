@@ -17,27 +17,14 @@
  */
 
 const https = require("https");
-const { execFileSync, spawn } = require("child_process");
-const crypto = require("crypto");
-const { resolveOpenshell } = require("../bin/lib/resolve-openshell");
-const { shellQuote, validateName } = require("../bin/lib/runner");
-
-const OPENSHELL = resolveOpenshell();
-if (!OPENSHELL) {
-  console.error("openshell not found on PATH or in common locations");
-  process.exit(1);
-}
+const { runAgentInSandbox, SANDBOX } = require("./bridge-core");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const API_KEY = process.env.NVIDIA_API_KEY;
-const SANDBOX = process.env.SANDBOX_NAME || "nemoclaw";
-try { validateName(SANDBOX, "SANDBOX_NAME"); } catch (e) { console.error(e.message); process.exit(1); }
+if (!TOKEN) { console.error("TELEGRAM_BOT_TOKEN required"); process.exit(1); }
+
 const ALLOWED_CHATS = process.env.ALLOWED_CHAT_IDS
   ? process.env.ALLOWED_CHAT_IDS.split(",").map((s) => s.trim())
   : null;
-
-if (!TOKEN) { console.error("TELEGRAM_BOT_TOKEN required"); process.exit(1); }
-if (!API_KEY) { console.error("NVIDIA_API_KEY required"); process.exit(1); }
 
 let offset = 0;
 const activeSessions = new Map(); // chatId → message history
@@ -91,70 +78,6 @@ async function sendTyping(chatId) {
   await tgApi("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
 }
 
-// ── Run agent inside sandbox ──────────────────────────────────────
-
-function runAgentInSandbox(message, sessionId) {
-  return new Promise((resolve) => {
-    const sshConfig = execFileSync(OPENSHELL, ["sandbox", "ssh-config", SANDBOX], { encoding: "utf-8" });
-
-    // Write temp ssh config with unpredictable name
-    const confDir = require("fs").mkdtempSync("/tmp/nemoclaw-tg-ssh-");
-    const confPath = `${confDir}/config`;
-    require("fs").writeFileSync(confPath, sshConfig, { mode: 0o600 });
-
-    // Pass message and API key via stdin to avoid shell interpolation.
-    // The remote command reads them from environment/stdin rather than
-    // embedding user content in a shell string.
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9-]/g, "");
-    const cmd = `export NVIDIA_API_KEY=${shellQuote(API_KEY)} && nemoclaw-start openclaw agent --agent main --local -m ${shellQuote(message)} --session-id ${shellQuote("tg-" + safeSessionId)}`;
-
-    const proc = spawn("ssh", ["-T", "-F", confPath, `openshell-${SANDBOX}`, cmd], {
-      timeout: 120000,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout.on("data", (d) => (stdout += d.toString()));
-    proc.stderr.on("data", (d) => (stderr += d.toString()));
-
-    proc.on("close", (code) => {
-      try { require("fs").unlinkSync(confPath); require("fs").rmdirSync(confDir); } catch {}
-
-      // Extract the actual agent response — skip setup lines
-      const lines = stdout.split("\n");
-      const responseLines = lines.filter(
-        (l) =>
-          !l.startsWith("Setting up NemoClaw") &&
-          !l.startsWith("[plugins]") &&
-          !l.startsWith("(node:") &&
-          !l.includes("NemoClaw ready") &&
-          !l.includes("NemoClaw registered") &&
-          !l.includes("openclaw agent") &&
-          !l.includes("┌─") &&
-          !l.includes("│ ") &&
-          !l.includes("└─") &&
-          l.trim() !== "",
-      );
-
-      const response = responseLines.join("\n").trim();
-
-      if (response) {
-        resolve(response);
-      } else if (code !== 0) {
-        resolve(`Agent exited with code ${code}. ${stderr.trim().slice(0, 500)}`);
-      } else {
-        resolve("(no response)");
-      }
-    });
-
-    proc.on("error", (err) => {
-      resolve(`Error: ${err.message}`);
-    });
-  });
-}
-
 // ── Poll loop ─────────────────────────────────────────────────────
 
 async function poll() {
@@ -206,7 +129,7 @@ async function poll() {
         const typingInterval = setInterval(() => sendTyping(chatId), 4000);
 
         try {
-          const response = await runAgentInSandbox(msg.text, chatId);
+          const response = await runAgentInSandbox(msg.text, `tg-${chatId}`);
           clearInterval(typingInterval);
           console.log(`[${chatId}] agent: ${response.slice(0, 100)}...`);
           await sendMessage(chatId, response, msg.message_id);

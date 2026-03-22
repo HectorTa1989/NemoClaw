@@ -200,11 +200,19 @@ describe("runner helpers", () => {
       }
     });
 
-    it("telegram bridge validates SANDBOX_NAME on startup", () => {
+    it("bridge-core validates SANDBOX_NAME on startup", () => {
       const fs = require("fs");
-      const src = fs.readFileSync(path.join(__dirname, "..", "scripts", "telegram-bridge.js"), "utf-8");
-      assert.ok(src.includes("validateName(SANDBOX"), "telegram-bridge.js must validate SANDBOX_NAME");
-      assert.ok(!src.includes("execSync"), "telegram-bridge.js should not use execSync");
+      const src = fs.readFileSync(path.join(__dirname, "..", "scripts", "bridge-core.js"), "utf-8");
+      assert.ok(src.includes("validateName(SANDBOX"), "bridge-core.js must validate SANDBOX_NAME");
+      assert.ok(!src.includes("execSync"), "bridge-core.js should not use execSync");
+    });
+
+    it("bridges use shared bridge-core module", () => {
+      const fs = require("fs");
+      const tg = fs.readFileSync(path.join(__dirname, "..", "scripts", "telegram-bridge.js"), "utf-8");
+      const dc = fs.readFileSync(path.join(__dirname, "..", "scripts", "discord-bridge.js"), "utf-8");
+      assert.ok(tg.includes("require(\"./bridge-core\")"), "telegram-bridge.js must use bridge-core");
+      assert.ok(dc.includes("require(\"./bridge-core\")"), "discord-bridge.js must use bridge-core");
     });
   });
 });
