@@ -40,5 +40,46 @@ describe("config-set", () => {
       );
       expect(patch).toContain("delete _ov.gateway");
     });
+
+    it("patch guards against prototype pollution", () => {
+      const patch = readFileSync(
+        join(__dirname, "..", "patches", "openclaw-config-overrides.patch"),
+        "utf-8"
+      );
+      expect(patch).toContain("__proto__");
+      expect(patch).toContain("constructor");
+      expect(patch).toContain("prototype");
+    });
+
+    it("patch uses isPlainObject check on root override", () => {
+      const patch = readFileSync(
+        join(__dirname, "..", "patches", "openclaw-config-overrides.patch"),
+        "utf-8"
+      );
+      expect(patch).toContain("isPlainObject$2(_ov)");
+    });
+
+    it("patch diagnostics use stderr not stdout", () => {
+      const patch = readFileSync(
+        join(__dirname, "..", "patches", "openclaw-config-overrides.patch"),
+        "utf-8"
+      );
+      // Should not have console.log for diagnostics (would pollute --json output)
+      const lines = patch.split("\n").filter(l => l.startsWith("+"));
+      const logLines = lines.filter(l => l.includes("console.log"));
+      expect(logLines).toHaveLength(0);
+    });
+  });
+
+  describe("parseValue defaults to string", () => {
+    it("config-set treats values as strings by default (safe for tokens)", () => {
+      const src = readFileSync(
+        join(__dirname, "..", "bin", "lib", "config-set.js"),
+        "utf-8"
+      );
+      // parseValue should default to returning raw string
+      expect(src).toContain("json = false");
+      expect(src).toContain("if (!json) return raw");
+    });
   });
 });
