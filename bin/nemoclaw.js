@@ -173,7 +173,11 @@ async function deploy(instanceName) {
   const ghToken = process.env.GITHUB_TOKEN;
   if (ghToken) envLines.push(`GITHUB_TOKEN=${shellQuote(ghToken)}`);
   const tgToken = getCredential("TELEGRAM_BOT_TOKEN");
-  if (tgToken) envLines.push(`TELEGRAM_BOT_TOKEN=${shellQuote(tgToken)}`);
+  if (tgToken) {
+    envLines.push(`TELEGRAM_BOT_TOKEN=${shellQuote(tgToken)}`);
+    const allowedChatIds = getCredential("ALLOWED_CHAT_IDS");
+    if (allowedChatIds) envLines.push(`ALLOWED_CHAT_IDS=${shellQuote(allowedChatIds)}`);
+  }
   const discordToken = getCredential("DISCORD_BOT_TOKEN");
   if (discordToken) envLines.push(`DISCORD_BOT_TOKEN=${shellQuote(discordToken)}`);
   const slackToken = getCredential("SLACK_BOT_TOKEN");
