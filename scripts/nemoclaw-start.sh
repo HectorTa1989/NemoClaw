@@ -145,15 +145,9 @@ fi
 # Create empty config overrides file so the shim has a valid target on first
 # load.  The file lives in the writable partition and can be updated at
 # runtime via `nemoclaw config-set` or `openshell sandbox upload`.
-if [ -n "${OPENCLAW_CONFIG_OVERRIDES_FILE:-}" ]; then
-  if [ ! -f "${OPENCLAW_CONFIG_OVERRIDES_FILE}" ] || [ "$(cat "${OPENCLAW_CONFIG_OVERRIDES_FILE}" 2>/dev/null)" = "{}" ]; then
-    echo '{"agents":{"defaults":{"model":{"primary":"inference/SHIM-TEST-WORKS"}}}}' >"${OPENCLAW_CONFIG_OVERRIDES_FILE}"
-  fi
+if [ -n "${OPENCLAW_CONFIG_OVERRIDES_FILE:-}" ] && [ ! -f "${OPENCLAW_CONFIG_OVERRIDES_FILE}" ]; then
+  echo '{}' >"${OPENCLAW_CONFIG_OVERRIDES_FILE}"
 fi
-
-echo "[entrypoint] OPENCLAW_CONFIG_OVERRIDES_FILE=${OPENCLAW_CONFIG_OVERRIDES_FILE:-NOT SET}" >>/sandbox/.openclaw-data/entrypoint-debug.log
-echo "[entrypoint] File exists: $(test -f "${OPENCLAW_CONFIG_OVERRIDES_FILE:-/nonexistent}" && echo YES || echo NO)" >>/sandbox/.openclaw-data/entrypoint-debug.log
-env | grep OPENCLAW >>/sandbox/.openclaw-data/entrypoint-debug.log 2>&1 || true
 
 nohup openclaw gateway run >/tmp/gateway.log 2>&1 &
 echo "[gateway] openclaw gateway launched (pid $!)"
