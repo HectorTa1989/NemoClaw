@@ -342,6 +342,7 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../deployment/deploy-to-remote-gpu.html">Deploy to a Remote GPU Instance</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up the Telegram Bridge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
 <ul class="nav bd-sidenav">
@@ -521,6 +522,29 @@ File issues and feedback through the GitHub repository as the project continues 
 </tbody>
 </table>
 </div>
+</section>
+<section id="macos-first-run-checklist">
+<h3>macOS first-run checklist<a class="headerlink" href="#macos-first-run-checklist" title="Link to this heading">#</a></h3>
+<p>On a fresh macOS machine, install the prerequisites in this order:</p>
+<ol class="arabic">
+<li><p>Install Xcode Command Line Tools:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>xcode-select<span class="w"> </span>--install
+</pre></div>
+</div>
+</li>
+<li><p>Install and start a supported container runtime:</p>
+<ul class="simple">
+<li><p>Docker Desktop</p></li>
+<li><p>Colima</p></li>
+</ul>
+</li>
+<li><p>Run the NemoClaw installer.</p></li>
+</ol>
+<p>This avoids the two most common first-run failures on macOS:</p>
+<ul class="simple">
+<li><p>missing developer tools needed by the installer and Node.js toolchain</p></li>
+<li><p>Docker connection errors when no supported container runtime is installed or running</p></li>
+</ul>
 <blockquote>
 <div><p><strong>💡 Tip</strong></p>
 <p>For DGX Spark, follow the <a class="reference external" href="https://github.com/NVIDIA/NemoClaw/blob/main/spark-install.md" rel="noreferer noopener" target="_blank">DGX Spark setup guide</a>. It covers Spark-specific prerequisites, such as cgroup v2 and Docker configuration, before running the standard installer.</p>
@@ -682,6 +706,7 @@ Logs:        nemoclaw my-assistant logs --follow
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware">Hardware</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#software">Software</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#container-runtime-support">Container Runtime Support</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#macos-first-run-checklist">macOS first-run checklist</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install-nemoclaw-and-onboard-openclaw-agent">Install NemoClaw and Onboard OpenClaw Agent</a></li>

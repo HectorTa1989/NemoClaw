@@ -342,6 +342,7 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../deployment/deploy-to-remote-gpu.html">Deploy to a Remote GPU Instance</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment/set-up-telegram-bridge.html">Set Up the Telegram Bridge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../deployment/sandbox-hardening.html">Sandbox Hardening</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Monitoring</span></p>
 <ul class="nav bd-sidenav">
@@ -526,6 +527,49 @@ If neither is found, verify that Colima is running:</p>
 </section>
 <section id="runtime">
 <h2>Runtime<a class="headerlink" href="#runtime" title="Link to this heading">#</a></h2>
+<section id="reconnect-after-a-host-reboot">
+<h3>Reconnect after a host reboot<a class="headerlink" href="#reconnect-after-a-host-reboot" title="Link to this heading">#</a></h3>
+<p>After a host reboot, the container runtime, OpenShell gateway, and sandbox may not be running.
+Follow these steps to reconnect.</p>
+<ol class="arabic">
+<li><p>Start the container runtime.</p>
+<ul class="simple">
+<li><p><strong>Linux:</strong> start Docker if it is not already running (<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">systemctl</span> <span class="pre">start</span> <span class="pre">docker</span></code>)</p></li>
+<li><p><strong>macOS:</strong> open Docker Desktop or start Colima (<code class="docutils literal notranslate"><span class="pre">colima</span> <span class="pre">start</span></code>)</p></li>
+</ul>
+</li>
+<li><p>Check sandbox state.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>sandbox<span class="w"> </span>list
+</pre></div>
+</div>
+<p>If the sandbox shows <code class="docutils literal notranslate"><span class="pre">Ready</span></code>, skip to step 4.</p>
+</li>
+<li><p>Restart the gateway (if needed).</p>
+<p>If the sandbox is not listed or the command fails, restart the OpenShell gateway:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>gateway<span class="w"> </span>start<span class="w"> </span>--name<span class="w"> </span>nemoclaw
+</pre></div>
+</div>
+<p>Wait a few seconds, then re-check with <code class="docutils literal notranslate"><span class="pre">openshell</span> <span class="pre">sandbox</span> <span class="pre">list</span></code>.</p>
+</li>
+<li><p>Reconnect.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>&lt;name&gt;<span class="w"> </span>connect
+</pre></div>
+</div>
+</li>
+<li><p>Start auxiliary services (if needed).</p>
+<p>If you use the Telegram bridge or cloudflared tunnel, start them again:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>nemoclaw<span class="w"> </span>start
+</pre></div>
+</div>
+</li>
+</ol>
+<div class="warning admonition">
+<p class="admonition-title">If the sandbox does not recover</p>
+<p>If the sandbox remains missing after restarting the gateway, run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code> to recreate it.
+The wizard prompts for confirmation before destroying an existing sandbox. If you confirm, it <strong>destroys and recreates</strong> the sandbox — workspace files (SOUL.md, USER.md, IDENTITY.md, AGENTS.md, MEMORY.md, and daily memory notes) are lost.
+Back up your workspace first by following the instructions at <a class="reference internal" href="../workspace/backup-restore.html"><span class="std std-doc">Back Up and Restore</span></a>.</p>
+</div>
+</section>
 <section id="sandbox-shows-as-stopped">
 <h3>Sandbox shows as stopped<a class="headerlink" href="#sandbox-shows-as-stopped" title="Link to this heading">#</a></h3>
 <p>The sandbox may have been stopped or deleted.
@@ -635,6 +679,7 @@ Refer to <a class="reference internal" href="../network-policy/customize-network
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runtime">Runtime</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reconnect-after-a-host-reboot">Reconnect after a host reboot</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sandbox-shows-as-stopped">Sandbox shows as stopped</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#status-shows-not-running-inside-the-sandbox">Status shows “not running” inside the sandbox</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inference-requests-time-out">Inference requests time out</a></li>
