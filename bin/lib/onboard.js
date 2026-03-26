@@ -1600,9 +1600,7 @@ async function setupNim(gpu) {
   const options = [];
   options.push({
     key: "build",
-    label:
-      "NVIDIA Endpoints" +
-      (!ollamaRunning && !(EXPERIMENTAL && vllmRunning) ? " (recommended)" : ""),
+    label: "NVIDIA Endpoints",
   });
   options.push({ key: "openai", label: "OpenAI" });
   options.push({ key: "custom", label: "Other OpenAI-compatible endpoint" });
