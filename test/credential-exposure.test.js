@@ -76,7 +76,12 @@ describe("credential exposure in process arguments", () => {
   it("onboard.js does not embed sandbox secrets in the sandbox create command line", () => {
     const src = fs.readFileSync(ONBOARD_JS, "utf-8");
 
-    expect(src).toMatch(/const sandboxEnv = \{ \.\.\.process\.env \};/);
+    // sandboxEnv must be built with a blocklist that strips all credential env vars
+    expect(src).toMatch(/blockedSandboxEnvNames/);
+    expect(src).toMatch(/NVIDIA_API_KEY/);
+    expect(src).toMatch(/DISCORD_BOT_TOKEN/);
+    expect(src).toMatch(/SLACK_BOT_TOKEN/);
+    expect(src).toMatch(/TELEGRAM_BOT_TOKEN/);
     expect(src).toMatch(/streamSandboxCreate\(createCommand, sandboxEnv(?:, \{)?/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("NVIDIA_API_KEY"/);
     expect(src).not.toMatch(/envArgs\.push\(formatEnvAssignment\("DISCORD_BOT_TOKEN"/);
