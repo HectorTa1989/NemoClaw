@@ -95,8 +95,7 @@ jobs:
 
       - name: Install Brev CLI
         run: |
-          # Pin to v0.6.310 — v0.6.322 removed --cpu flag and defaults to GPU instances
-          curl -fsSL -o /tmp/brev.tar.gz "https://github.com/brevdev/brev-cli/releases/download/v0.6.310/brev-cli_0.6.310_linux_amd64.tar.gz"
+          curl -fsSL -o /tmp/brev.tar.gz "https://github.com/brevdev/brev-cli/releases/download/v0.6.322/brev-cli_0.6.322_linux_amd64.tar.gz"
           tar -xzf /tmp/brev.tar.gz -C /usr/local/bin brev
           chmod +x /usr/local/bin/brev
 

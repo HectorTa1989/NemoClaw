@@ -17,7 +17,6 @@
  *
  * Optional env vars:
  *   TEST_SUITE       — which test to run: full (default), credential-sanitization, all
- *   BREV_CPU         — CPU spec (default: 4x16)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -26,7 +25,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const BREV_CPU = process.env.BREV_CPU || "4x16";
+// Instance type is determined by the Brev org's defaults (e.g. T4 GPU in Nemoclaw CI/CD)
 const INSTANCE_NAME = process.env.INSTANCE_NAME;
 const TEST_SUITE = process.env.TEST_SUITE || "full";
 const REPO_DIR = path.resolve(import.meta.dirname, "../..");
@@ -127,7 +126,7 @@ describe.runIf(hasRequiredVars)("Brev E2E", () => {
     brev("org", "set", BREV_ORG);
 
     // Create instance
-    brev("create", INSTANCE_NAME, "--cpu", BREV_CPU, "--detached");
+    brev("create", INSTANCE_NAME, "--detached");
     instanceCreated = true;
 
     // Wait for instance to be reachable via brev exec
