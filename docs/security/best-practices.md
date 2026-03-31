@@ -26,6 +26,11 @@ This page documents every configurable knob, its default, what it protects, the 
 
 For background on how the layers fit together, refer to [How It Works](../about/how-it-works.md).
 
+:::{seealso}
+OpenShell enforces the platform-level mechanisms that NemoClaw configures, including network namespace isolation, seccomp filters, SSRF protection, TLS termination, and gateway authentication.
+For the full platform-level controls reference, see [OpenShell Security Best Practices](https://docs.nvidia.com/openshell/latest/security/best-practices.html).
+:::
+
 ## Protection Layers at a Glance
 
 NemoClaw enforces security at four layers.
@@ -82,6 +87,9 @@ flowchart LR
 :::
 
 ## Network Controls
+
+OpenShell provides additional network enforcement mechanisms not covered here, including network namespace isolation, SSRF protection, TLS auto-detection and termination, and audit-vs-enforce modes.
+See the [Network Controls](https://docs.nvidia.com/openshell/latest/security/best-practices.html#network-controls) section of the OpenShell Security Best Practices.
 
 ### Deny-by-Default Egress
 
@@ -162,6 +170,9 @@ NemoClaw ships preset policy files in `nemoclaw-blueprint/policies/presets/` for
 
 ## Filesystem Controls
 
+OpenShell covers additional filesystem enforcement details, including `hard_requirement` compatibility mode for Landlock and policy path validation rules.
+See the [Filesystem Controls](https://docs.nvidia.com/openshell/latest/security/best-practices.html#filesystem-controls) section of the OpenShell Security Best Practices.
+
 ### Read-Only System Paths
 
 The container mounts system directories read-only to prevent the agent from modifying binaries, libraries, or configuration files.
@@ -215,6 +226,9 @@ Landlock is a Linux Security Module that enforces filesystem access rules at the
 | Recommendation | Run on a kernel that supports Landlock (5.13+). Ubuntu 22.04 LTS and later include Landlock support. |
 
 ## Process Controls
+
+OpenShell enforces additional process-level controls not covered here, including seccomp BPF socket domain filters and a specific enforcement application order (namespace entry, privilege drop, Landlock, seccomp).
+See the [Process Controls](https://docs.nvidia.com/openshell/latest/security/best-practices.html#process-controls) section of the OpenShell Security Best Practices.
 
 ### Capability Drops
 
@@ -304,6 +318,8 @@ The Dockerfile removes compilers and network probes from the runtime image.
 | Recommendation | Keep build tools removed. If the agent needs to compile code, run the build in a separate, purpose-built container and copy artifacts into the sandbox. |
 
 ## Inference Controls
+
+OpenShell routes all inference traffic through the gateway to isolate provider credentials from the sandbox.
 
 ### Routed Inference through `inference.local`
 
@@ -397,3 +413,4 @@ The following patterns weaken security without providing meaningful benefit.
 - [Sandbox Hardening](../deployment/sandbox-hardening.md) for container-level security measures.
 - [Inference Profiles](../reference/inference-profiles.md) for provider configuration details.
 - [How It Works](../about/how-it-works.md) for the protection layer architecture.
+- OpenShell [Security Best Practices](https://docs.nvidia.com/openshell/latest/security/best-practices.html) for the platform-level controls reference, including network namespace isolation, seccomp filters, SSRF protection, TLS termination, and gateway authentication.
