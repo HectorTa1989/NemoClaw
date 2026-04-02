@@ -777,15 +777,16 @@ async function deploy(instanceName) {
 }
 
 async function start() {
+  const { startAll } = require("./lib/services");
   const { defaultSandbox } = registry.listSandboxes();
   const safeName =
     defaultSandbox && /^[a-zA-Z0-9._-]+$/.test(defaultSandbox) ? defaultSandbox : null;
-  const sandboxEnv = safeName ? `SANDBOX_NAME=${shellQuote(safeName)}` : "";
-  run(`${sandboxEnv} bash "${SCRIPTS}/start-services.sh"`);
+  await startAll({ sandboxName: safeName || undefined });
 }
 
 function stop() {
-  run(`bash "${SCRIPTS}/start-services.sh" --stop`);
+  const { stopAll } = require("./lib/services");
+  stopAll();
 }
 
 function debug(args) {
@@ -860,7 +861,8 @@ function showStatus() {
   }
 
   // Show service status
-  run(`bash "${SCRIPTS}/start-services.sh" --status`);
+  const { showStatus: showServiceStatus } = require("./lib/services");
+  showServiceStatus();
 }
 
 async function listSandboxes() {

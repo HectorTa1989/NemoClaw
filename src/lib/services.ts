@@ -12,6 +12,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
+import { platform } from "node:os";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,14 +252,12 @@ export async function startAll(opts: ServiceOptions = {}): Promise<void> {
   // Compiled location: dist/lib/services.js → repo root is 2 levels up
   const repoDir = opts.repoDir ?? join(__dirname, "..", "..");
 
-  if (!process.env.NVIDIA_API_KEY) {
-    console.error(`${RED}[services]${NC} NVIDIA_API_KEY required`);
-    process.exit(1);
-  }
-
   if (!process.env.TELEGRAM_BOT_TOKEN) {
     warn("TELEGRAM_BOT_TOKEN not set — Telegram bridge will not start.");
     warn("Create a bot via @BotFather on Telegram and set the token.");
+  } else if (!process.env.NVIDIA_API_KEY) {
+    warn("NVIDIA_API_KEY not set — Telegram bridge will not start.");
+    warn("Set NVIDIA_API_KEY if you want Telegram requests to reach inference.");
   }
 
   // Warn if no sandbox is ready
@@ -276,8 +275,22 @@ export async function startAll(opts: ServiceOptions = {}): Promise<void> {
 
   ensurePidDir(pidDir);
 
-  // Telegram bridge
-  if (process.env.TELEGRAM_BOT_TOKEN) {
+  // WSL2 ships with broken IPv6 routing — force IPv4-first DNS for bridge processes
+  if (platform() === "linux") {
+    const isWSL =
+      !!process.env.WSL_DISTRO_NAME ||
+      !!process.env.WSL_INTEROP ||
+      (existsSync("/proc/version") &&
+        readFileSync("/proc/version", "utf-8").toLowerCase().includes("microsoft"));
+    if (isWSL) {
+      const existing = process.env.NODE_OPTIONS ?? "";
+      process.env.NODE_OPTIONS = `${existing ? existing + " " : ""}--dns-result-order=ipv4first`;
+      info("WSL2 detected — setting --dns-result-order=ipv4first for Node.js bridge processes");
+    }
+  }
+
+  // Telegram bridge (only if both token and API key are set)
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.NVIDIA_API_KEY) {
     const sandboxName =
       opts.sandboxName ?? process.env.NEMOCLAW_SANDBOX ?? process.env.SANDBOX_NAME ?? "default";
     startService(
