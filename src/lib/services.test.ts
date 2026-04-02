@@ -40,12 +40,14 @@ describe("getServiceStatuses", () => {
     expect(names).toContain("cloudflared");
   });
 
-  it("detects a stale PID file as not running", () => {
+  it("detects a stale PID file as not running with null pid", () => {
     // Write a PID that doesn't correspond to a running process
     writeFileSync(join(pidDir, "cloudflared.pid"), "999999999");
     const statuses = getServiceStatuses({ pidDir });
     const cf = statuses.find((s) => s.name === "cloudflared");
     expect(cf?.running).toBe(false);
+    // Dead processes should have pid normalized to null
+    expect(cf?.pid).toBeNull();
   });
 
   it("ignores invalid PID file contents", () => {
@@ -61,6 +63,24 @@ describe("getServiceStatuses", () => {
     const statuses = getServiceStatuses({ pidDir: nested });
     expect(existsSync(nested)).toBe(true);
     expect(statuses).toHaveLength(2);
+  });
+});
+
+describe("sandbox name validation", () => {
+  it("rejects names with path traversal", () => {
+    expect(() => getServiceStatuses({ sandboxName: "../escape" })).toThrow("Invalid sandbox name");
+  });
+
+  it("rejects names with slashes", () => {
+    expect(() => getServiceStatuses({ sandboxName: "foo/bar" })).toThrow("Invalid sandbox name");
+  });
+
+  it("rejects empty names", () => {
+    expect(() => getServiceStatuses({ sandboxName: "" })).toThrow("Invalid sandbox name");
+  });
+
+  it("accepts valid alphanumeric names", () => {
+    expect(() => getServiceStatuses({ sandboxName: "my-sandbox.1" })).not.toThrow();
   });
 });
 

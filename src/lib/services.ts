@@ -128,6 +128,10 @@ function startService(
   });
   closeSync(logFd);
 
+  // Swallow errors on the detached child (e.g. ENOENT if the command
+  // doesn't exist) so Node doesn't crash with an unhandled 'error' event.
+  subprocess.on("error", () => {});
+
   const pid = subprocess.pid;
   if (pid === undefined) {
     warn(`${name} failed to start`);
@@ -190,9 +194,20 @@ function stopService(pidDir: string, name: ServiceName): void {
 // Actions
 // ---------------------------------------------------------------------------
 
+/** Reject sandbox names that could escape the PID directory via path traversal. */
+const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function validateSandboxName(name: string): string {
+  if (!SAFE_NAME_RE.test(name) || name.includes("..")) {
+    throw new Error(`Invalid sandbox name: ${JSON.stringify(name)}`);
+  }
+  return name;
+}
+
 function resolvePidDir(opts: ServiceOptions): string {
-  const sandbox =
-    opts.sandboxName ?? process.env.NEMOCLAW_SANDBOX ?? process.env.SANDBOX_NAME ?? "default";
+  const sandbox = validateSandboxName(
+    opts.sandboxName ?? process.env.NEMOCLAW_SANDBOX ?? process.env.SANDBOX_NAME ?? "default",
+  );
   return opts.pidDir ?? `/tmp/nemoclaw-services-${sandbox}`;
 }
 
@@ -344,9 +359,12 @@ export async function startAll(opts: ServiceOptions = {}): Promise<void> {
 export function getServiceStatuses(opts: ServiceOptions = {}): ServiceStatus[] {
   const pidDir = resolvePidDir(opts);
   ensurePidDir(pidDir);
-  return SERVICE_NAMES.map((name) => ({
-    name,
-    running: isRunning(pidDir, name),
-    pid: readPid(pidDir, name),
-  }));
+  return SERVICE_NAMES.map((name) => {
+    const running = isRunning(pidDir, name);
+    return {
+      name,
+      running,
+      pid: running ? readPid(pidDir, name) : null,
+    };
+  });
 }
