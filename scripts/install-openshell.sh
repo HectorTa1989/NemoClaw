@@ -80,15 +80,16 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 CHECKSUM_FILE="openshell-checksums-sha256.txt"
+OPENSHELL_PIN="v0.0.20"
 if command -v gh >/dev/null 2>&1; then
-  GH_TOKEN="${GITHUB_TOKEN:-}" gh release download --repo NVIDIA/OpenShell \
+  GH_TOKEN="${GITHUB_TOKEN:-}" gh release download "$OPENSHELL_PIN" --repo NVIDIA/OpenShell \
     --pattern "$ASSET" --dir "$tmpdir"
-  GH_TOKEN="${GITHUB_TOKEN:-}" gh release download --repo NVIDIA/OpenShell \
+  GH_TOKEN="${GITHUB_TOKEN:-}" gh release download "$OPENSHELL_PIN" --repo NVIDIA/OpenShell \
     --pattern "$CHECKSUM_FILE" --dir "$tmpdir"
 else
-  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/latest/download/$ASSET" \
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/${OPENSHELL_PIN}/$ASSET" \
     -o "$tmpdir/$ASSET"
-  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/latest/download/$CHECKSUM_FILE" \
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/${OPENSHELL_PIN}/$CHECKSUM_FILE" \
     -o "$tmpdir/$CHECKSUM_FILE"
 fi
 
