@@ -2141,14 +2141,24 @@ async function createSandbox(
 
   if (liveExists) {
     const existingSandboxState = getSandboxReuseState(sandboxName);
+
+    // Check whether messaging providers are missing from the gateway. Only
+    // force recreation when at least one required provider doesn't exist yet —
+    // this avoids destroying sandboxes already created with provider attachments.
+    const needsProviderMigration =
+      hasMessagingTokens &&
+      [
+        { envKey: "DISCORD_BOT_TOKEN", provider: "discord-bridge" },
+        { envKey: "SLACK_BOT_TOKEN", provider: "slack-bridge" },
+        { envKey: "TELEGRAM_BOT_TOKEN", provider: "telegram-bridge" },
+      ].some(
+        ({ envKey, provider }) =>
+          (getCredential(envKey) || process.env[envKey]) && !providerExistsInGateway(provider),
+      );
+
     if (existingSandboxState === "ready" && process.env.NEMOCLAW_RECREATE_SANDBOX !== "1") {
-      // If messaging tokens are configured, the existing sandbox may not have
-      // provider attachments (created before this change). Force recreation so
-      // credentials flow through the provider pipeline instead of raw env vars.
-      if (hasMessagingTokens) {
-        console.log(
-          `  Sandbox '${sandboxName}' exists but messaging providers may not be attached.`,
-        );
+      if (needsProviderMigration) {
+        console.log(`  Sandbox '${sandboxName}' exists but messaging providers are not attached.`);
         console.log("  Recreating to ensure credentials flow through the provider pipeline.");
       } else {
         ensureDashboardForward(sandboxName, chatUiUrl);
@@ -2163,7 +2173,7 @@ async function createSandbox(
       }
     }
 
-    if (existingSandboxState === "ready" && hasMessagingTokens) {
+    if (existingSandboxState === "ready" && needsProviderMigration) {
       note(`  Sandbox '${sandboxName}' exists — recreating to attach messaging providers.`);
     } else if (existingSandboxState === "ready") {
       note(`  Sandbox '${sandboxName}' exists and is ready — recreating by explicit request.`);
@@ -2206,27 +2216,31 @@ async function createSandbox(
   // still reads from host env — Telegram uses URL-path auth (/bot{TOKEN}/) which
   // the proxy can't rewrite yet.
   const messagingProviders = [];
-  const discordToken = getCredential("DISCORD_BOT_TOKEN") || process.env.DISCORD_BOT_TOKEN;
-  if (discordToken) {
-    upsertProvider("discord-bridge", "generic", "DISCORD_BOT_TOKEN", null, {
-      DISCORD_BOT_TOKEN: discordToken,
-    });
-    messagingProviders.push("discord-bridge");
-  }
-  const slackToken = getCredential("SLACK_BOT_TOKEN") || process.env.SLACK_BOT_TOKEN;
-  if (slackToken) {
-    upsertProvider("slack-bridge", "generic", "SLACK_BOT_TOKEN", null, {
-      SLACK_BOT_TOKEN: slackToken,
-    });
-    messagingProviders.push("slack-bridge");
-  }
-  const telegramToken =
-    hydrateCredentialEnv("TELEGRAM_BOT_TOKEN") || process.env.TELEGRAM_BOT_TOKEN;
-  if (telegramToken) {
-    upsertProvider("telegram-bridge", "generic", "TELEGRAM_BOT_TOKEN", null, {
-      TELEGRAM_BOT_TOKEN: telegramToken,
-    });
-    messagingProviders.push("telegram-bridge");
+  const messagingTokenDefs = [
+    {
+      name: "discord-bridge",
+      envKey: "DISCORD_BOT_TOKEN",
+      token: getCredential("DISCORD_BOT_TOKEN") || process.env.DISCORD_BOT_TOKEN,
+    },
+    {
+      name: "slack-bridge",
+      envKey: "SLACK_BOT_TOKEN",
+      token: getCredential("SLACK_BOT_TOKEN") || process.env.SLACK_BOT_TOKEN,
+    },
+    {
+      name: "telegram-bridge",
+      envKey: "TELEGRAM_BOT_TOKEN",
+      token: hydrateCredentialEnv("TELEGRAM_BOT_TOKEN") || process.env.TELEGRAM_BOT_TOKEN,
+    },
+  ];
+  for (const { name, envKey, token } of messagingTokenDefs) {
+    if (!token) continue;
+    const result = upsertProvider(name, "generic", envKey, null, { [envKey]: token });
+    if (!result.ok) {
+      console.error(`\n  ✗ Failed to create messaging provider '${name}': ${result.message}`);
+      process.exit(1);
+    }
+    messagingProviders.push(name);
   }
   for (const p of messagingProviders) {
     createArgs.push("--provider", p);

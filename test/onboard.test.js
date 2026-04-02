@@ -1712,6 +1712,164 @@ const { createSandbox } = require(${onboardPath});
     },
   );
 
+  it("aborts onboard when a messaging provider upsert fails", { timeout: 60_000 }, async () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-provider-fail-"));
+    const fakeBin = path.join(tmpDir, "bin");
+    const scriptPath = path.join(tmpDir, "provider-upsert-fail.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+    const runnerPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "runner.js"));
+    const registryPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "registry.js"));
+    const preflightPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "preflight.js"));
+    const credentialsPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "credentials.js"));
+
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(path.join(fakeBin, "openshell"), "#!/usr/bin/env bash\nexit 0\n", {
+      mode: 0o755,
+    });
+
+    const script = String.raw`
+const runner = require(${runnerPath});
+const registry = require(${registryPath});
+const preflight = require(${preflightPath});
+const credentials = require(${credentialsPath});
+const childProcess = require("node:child_process");
+const { EventEmitter } = require("node:events");
+
+runner.run = (command, opts = {}) => {
+  // Fail all provider create and update calls
+  if (command.includes("'provider'")) {
+    return { status: 1, stdout: "", stderr: "gateway unreachable" };
+  }
+  return { status: 0 };
+};
+runner.runCapture = (command) => {
+  if (command.includes("'sandbox' 'get'")) return "";
+  if (command.includes("'sandbox' 'list'")) return "";
+  return "";
+};
+registry.registerSandbox = () => true;
+registry.removeSandbox = () => true;
+preflight.checkPortAvailable = async () => ({ ok: true });
+credentials.prompt = async () => "";
+
+const { createSandbox } = require(${onboardPath});
+
+(async () => {
+  process.env.OPENSHELL_GATEWAY = "nemoclaw";
+  process.env.DISCORD_BOT_TOKEN = "test-discord-token-value";
+  await createSandbox(null, "gpt-5.4");
+  // Should not reach here
+  console.log("ERROR_DID_NOT_EXIT");
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+    fs.writeFileSync(scriptPath, script);
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+        PATH: `${fakeBin}:${process.env.PATH || ""}`,
+        NEMOCLAW_NON_INTERACTIVE: "1",
+      },
+    });
+
+    assert.notEqual(result.status, 0, "expected non-zero exit when provider upsert fails");
+    assert.ok(
+      !result.stdout.includes("ERROR_DID_NOT_EXIT"),
+      "onboard should have aborted before reaching sandbox create",
+    );
+  });
+
+  it(
+    "reuses sandbox when messaging providers already exist in gateway",
+    { timeout: 60_000 },
+    async () => {
+      const repoRoot = path.join(import.meta.dirname, "..");
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-reuse-providers-"));
+      const fakeBin = path.join(tmpDir, "bin");
+      const scriptPath = path.join(tmpDir, "reuse-with-providers.js");
+      const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+      const runnerPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "runner.js"));
+      const registryPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "registry.js"));
+
+      fs.mkdirSync(fakeBin, { recursive: true });
+      fs.writeFileSync(path.join(fakeBin, "openshell"), "#!/usr/bin/env bash\nexit 0\n", {
+        mode: 0o755,
+      });
+
+      const script = String.raw`
+const runner = require(${runnerPath});
+const registry = require(${registryPath});
+
+const commands = [];
+runner.run = (command, opts = {}) => {
+  commands.push({ command, env: opts.env || null });
+  return { status: 0 };
+};
+runner.runCapture = (command) => {
+  // Existing sandbox that is ready
+  if (command.includes("'sandbox' 'get' 'my-assistant'")) return "my-assistant";
+  if (command.includes("'sandbox' 'list'")) return "my-assistant Ready";
+  // All messaging providers already exist in gateway
+  if (command.includes("'provider' 'get'")) return "Provider: exists";
+  return "";
+};
+registry.getSandbox = () => ({ name: "my-assistant", gpuEnabled: false });
+
+const { createSandbox } = require(${onboardPath});
+
+(async () => {
+  process.env.OPENSHELL_GATEWAY = "nemoclaw";
+  process.env.DISCORD_BOT_TOKEN = "test-discord-token";
+  process.env.SLACK_BOT_TOKEN = "xoxb-test-slack-token";
+  const sandboxName = await createSandbox(null, "gpt-5.4", "nvidia-prod", null, "my-assistant");
+  console.log(JSON.stringify({ sandboxName, commands }));
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+`;
+      fs.writeFileSync(scriptPath, script);
+
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          HOME: tmpDir,
+          PATH: `${fakeBin}:${process.env.PATH || ""}`,
+          NEMOCLAW_NON_INTERACTIVE: "1",
+        },
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      const payloadLine = result.stdout
+        .trim()
+        .split("\n")
+        .slice()
+        .reverse()
+        .find((line) => line.startsWith("{") && line.endsWith("}"));
+      assert.ok(payloadLine, `expected JSON payload in stdout:\n${result.stdout}`);
+      const payload = JSON.parse(payloadLine);
+
+      assert.equal(payload.sandboxName, "my-assistant", "should reuse existing sandbox");
+      assert.ok(
+        payload.commands.every((entry) => !entry.command.includes("'sandbox' 'create'")),
+        "should NOT recreate sandbox when providers already exist in gateway",
+      );
+      assert.ok(
+        payload.commands.every((entry) => !entry.command.includes("'sandbox' 'delete'")),
+        "should NOT delete sandbox when providers already exist in gateway",
+      );
+    },
+  );
+
   it("upsertProvider creates a new provider and returns ok on success", () => {
     const repoRoot = path.join(import.meta.dirname, "..");
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-upsert-provider-create-"));
