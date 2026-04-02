@@ -81,16 +81,16 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 CHECKSUM_FILE="openshell-checksums-sha256.txt"
 download_with_curl() {
-  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/latest/download/$ASSET" \
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/v0.0.20/$ASSET" \
     -o "$tmpdir/$ASSET"
-  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/latest/download/$CHECKSUM_FILE" \
+  curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/v0.0.20/$CHECKSUM_FILE" \
     -o "$tmpdir/$CHECKSUM_FILE"
 }
 
 if command -v gh >/dev/null 2>&1; then
-  if GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download --repo NVIDIA/OpenShell \
+  if GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download --repo NVIDIA/OpenShell --tag v0.0.20 \
     --pattern "$ASSET" --dir "$tmpdir" 2>/dev/null \
-    && GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download --repo NVIDIA/OpenShell \
+    && GH_PROMPT_DISABLED=1 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download --repo NVIDIA/OpenShell --tag v0.0.20 \
       --pattern "$CHECKSUM_FILE" --dir "$tmpdir" 2>/dev/null; then
     : # gh succeeded
   else
