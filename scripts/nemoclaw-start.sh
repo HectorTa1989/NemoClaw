@@ -137,6 +137,86 @@ os.chmod(path, 0o600)
 PYAUTH
 }
 
+configure_messaging_channels() {
+  # If any messaging tokens are present (injected as placeholders by the
+  # OpenShell provider system), patch openclaw.json to enable the
+  # corresponding OpenClaw native channels. The placeholder values flow
+  # through to API calls where the L7 proxy swaps them for real secrets.
+  # Real tokens are never visible inside the sandbox.
+  #
+  # Requires root: openclaw.json is owned by root with chmod 444.
+  # Non-root mode cannot patch the config — channels are unavailable.
+  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ] || return 0
+
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "[channels] Messaging tokens detected but running as non-root — channels unavailable" >&2
+    return 0
+  fi
+
+  local config_path="/sandbox/.openclaw/openclaw.json"
+  local hash_path="/sandbox/.openclaw/.config-hash"
+
+  # Temporarily make config writable
+  chmod 644 "$config_path"
+  chmod 644 "$hash_path"
+
+  python3 - <<'PYCHANNELS'
+import json, os
+
+config_path = '/sandbox/.openclaw/openclaw.json'
+config = json.load(open(config_path))
+
+channels = config.get('channels', {'defaults': {'configWrites': False}})
+
+telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+if telegram_token:
+    channels['telegram'] = {
+        'accounts': {
+            'main': {
+                'botToken': telegram_token,
+                'enabled': True,
+            }
+        }
+    }
+
+discord_token = os.environ.get('DISCORD_BOT_TOKEN', '')
+if discord_token:
+    channels['discord'] = {
+        'accounts': {
+            'main': {
+                'token': discord_token,
+                'enabled': True,
+            }
+        }
+    }
+
+slack_token = os.environ.get('SLACK_BOT_TOKEN', '')
+if slack_token:
+    channels['slack'] = {
+        'accounts': {
+            'main': {
+                'botToken': slack_token,
+                'enabled': True,
+            }
+        }
+    }
+
+config['channels'] = channels
+json.dump(config, open(config_path, 'w'), indent=2)
+os.chmod(config_path, 0o444)
+PYCHANNELS
+
+  # Recompute config hash after patching
+  (cd /sandbox/.openclaw && sha256sum openclaw.json >.config-hash)
+  chmod 444 "$hash_path"
+  chown root:root "$hash_path"
+
+  echo "[channels] Messaging channels configured:" >&2
+  [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo "[channels]   telegram (native)" >&2
+  [ -n "${DISCORD_BOT_TOKEN:-}" ] && echo "[channels]   discord (native)" >&2
+  [ -n "${SLACK_BOT_TOKEN:-}" ] && echo "[channels]   slack (native)" >&2
+}
+
 print_dashboard_urls() {
   local token chat_ui_base local_url remote_url
 
@@ -345,6 +425,7 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "[SECURITY] Config integrity check failed — refusing to start (non-root mode)" >&2
     exit 1
   fi
+  configure_messaging_channels
   write_auth_profile
 
   if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
@@ -374,6 +455,11 @@ fi
 
 # Verify config integrity before starting anything
 verify_config_integrity
+
+# Inject messaging channel config if provider tokens are present.
+# Must run AFTER integrity check (to detect build-time tampering) and
+# BEFORE chattr +i (which locks the config permanently).
+configure_messaging_channels
 
 # Write auth profile as sandbox user (needs writable .openclaw-data)
 gosu sandbox bash -c "$(declare -f write_auth_profile); write_auth_profile"
