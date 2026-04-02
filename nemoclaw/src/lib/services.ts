@@ -1,7 +1,16 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 
@@ -104,15 +113,17 @@ function startService(
     return;
   }
 
+  // Open a single fd for the log file — mirrors bash `>log 2>&1`.
+  // Uses child_process.spawn directly because execa's typed API
+  // does not accept raw file descriptors for stdio.
   const logFile = join(pidDir, `${name}.log`);
-  const subprocess = execa(command, args, {
+  const logFd = openSync(logFile, "w");
+  const subprocess = spawn(command, args, {
     detached: true,
-    stdout: { file: logFile },
-    stderr: { file: logFile },
-    stdin: "ignore",
+    stdio: ["ignore", logFd, logFd],
     env: { ...process.env, ...env },
-    cleanup: false,
   });
+  closeSync(logFd);
 
   const pid = subprocess.pid;
   if (pid === undefined) {
@@ -205,14 +216,6 @@ export async function startAll(opts: ServiceOptions = {}): Promise<void> {
   if (!process.env.TELEGRAM_BOT_TOKEN) {
     warn("TELEGRAM_BOT_TOKEN not set \u2014 Telegram bridge will not start.");
     warn("Create a bot via @BotFather on Telegram and set the token.");
-  }
-
-  // Verify node is available (should always be true since we're running in Node)
-  try {
-    await execa("node", ["--version"], { reject: true, stdout: "ignore", stderr: "ignore" });
-  } catch {
-    console.error(`${RED}[services]${NC} node not found. Install Node.js first.`);
-    process.exit(1);
   }
 
   // Warn if no sandbox is ready
