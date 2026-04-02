@@ -6,6 +6,7 @@ const path = require("path");
 const os = require("os");
 const readline = require("readline");
 const { execFileSync } = require("child_process");
+const { readConfigFile, writeConfigFile } = require("./config-io");
 
 const UNSAFE_HOME_PATHS = new Set(["/tmp", "/var/tmp", "/dev/shm", "/"]);
 
@@ -56,15 +57,7 @@ function getCredsFile() {
 }
 
 function loadCredentials() {
-  try {
-    const file = getCredsFile();
-    if (fs.existsSync(file)) {
-      return JSON.parse(fs.readFileSync(file, "utf-8"));
-    }
-  } catch {
-    /* ignored */
-  }
-  return {};
+  return readConfigFile(getCredsFile(), {});
 }
 
 function normalizeCredentialValue(value) {
@@ -73,14 +66,9 @@ function normalizeCredentialValue(value) {
 }
 
 function saveCredential(key, value) {
-  const dir = getCredsDir();
-  const file = getCredsFile();
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.chmodSync(dir, 0o700);
   const creds = loadCredentials();
   creds[key] = normalizeCredentialValue(value);
-  fs.writeFileSync(file, JSON.stringify(creds, null, 2), { mode: 0o600 });
-  fs.chmodSync(file, 0o600);
+  writeConfigFile(getCredsFile(), creds);
 }
 
 function getCredential(key) {

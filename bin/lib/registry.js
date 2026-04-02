@@ -5,6 +5,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readConfigFile, writeConfigFile } = require("./config-io");
 
 const REGISTRY_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "sandboxes.json");
 const LOCK_DIR = REGISTRY_FILE + ".lock";
@@ -121,33 +122,11 @@ function withLock(fn) {
 }
 
 function load() {
-  try {
-    if (fs.existsSync(REGISTRY_FILE)) {
-      return JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8"));
-    }
-  } catch {
-    /* ignored */
-  }
-  return { sandboxes: {}, defaultSandbox: null };
+  return readConfigFile(REGISTRY_FILE, { sandboxes: {}, defaultSandbox: null });
 }
 
-/** Atomic write: tmp file + rename on the same filesystem. */
 function save(data) {
-  const dir = path.dirname(REGISTRY_FILE);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const tmp = REGISTRY_FILE + ".tmp." + process.pid;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, REGISTRY_FILE);
-  } catch (err) {
-    // Clean up partial temp file on failure
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      /* best effort */
-    }
-    throw err;
-  }
+  writeConfigFile(REGISTRY_FILE, data);
 }
 
 function getSandbox(name) {

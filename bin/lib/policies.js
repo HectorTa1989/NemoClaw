@@ -58,6 +58,22 @@ function getPresetEndpoints(content) {
 }
 
 /**
+ * Validate that a preset contains a binaries section.
+ * Presets without binaries cause 403 errors because the egress proxy
+ * has no approved binary list and denies all traffic (ref: #676).
+ */
+function validatePreset(presetContent, presetName) {
+  if (!presetContent.includes("binaries:")) {
+    console.warn(
+      `  Warning: preset '${presetName}' has no binaries section — ` +
+        `this will cause 403 errors in the sandbox (ref: #676)`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
  * Extract just the network_policies entries (indented content under
  * the `network_policies:` key) from a preset file, stripping the
  * `preset:` metadata header.
@@ -233,6 +249,8 @@ function applyPreset(sandboxName, presetName) {
     return false;
   }
 
+  validatePreset(presetContent, presetName);
+
   const presetEntries = extractPresetEntries(presetContent);
   if (!presetEntries) {
     console.error(`  Preset ${presetName} has no network_policies section.`);
@@ -294,6 +312,7 @@ module.exports = {
   loadPreset,
   getPresetEndpoints,
   extractPresetEntries,
+  validatePreset,
   parseCurrentPolicy,
   buildPolicySetCommand,
   buildPolicyGetCommand,
