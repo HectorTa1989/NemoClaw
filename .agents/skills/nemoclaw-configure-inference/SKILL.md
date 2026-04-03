@@ -163,6 +163,20 @@ Select **Local Ollama** from the provider list.
 NemoClaw lists installed models or offers starter models if none are installed.
 It pulls the selected model, loads it into memory, and validates it before continuing.
 
+### Linux with Docker
+
+On Linux hosts that run NemoClaw with Docker, the sandbox reaches Ollama through
+`http://host.openshell.internal:11434`, not the host shell's `localhost` socket.
+If Ollama is already running, make sure it listens on `0.0.0.0:11434` instead of
+`127.0.0.1:11434`.
+
+```console
+$ OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+If Ollama only binds loopback, NemoClaw can detect it on the host, but the
+sandbox-side validation step fails because containers cannot reach it.
+
 ### Non-Interactive Setup
 
 ```console
