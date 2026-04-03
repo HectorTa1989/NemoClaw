@@ -125,24 +125,6 @@ if [ -z "${NVIDIA_API_KEY:-}" ]; then
 fi
 pass "NVIDIA_API_KEY is set"
 
-if ! command -v openshell >/dev/null 2>&1; then
-  fail "openshell not found on PATH"
-  exit 1
-fi
-pass "openshell found"
-
-if ! command -v nemoclaw >/dev/null 2>&1; then
-  fail "nemoclaw not found on PATH"
-  exit 1
-fi
-pass "nemoclaw found"
-
-if ! command -v node >/dev/null 2>&1; then
-  fail "node not found on PATH"
-  exit 1
-fi
-pass "node found"
-
 if ! docker info >/dev/null 2>&1; then
   fail "Docker is not running"
   exit 1
@@ -154,30 +136,78 @@ info "Discord token: ${DISCORD_TOKEN:0:10}... (${#DISCORD_TOKEN} chars)"
 info "Sandbox name: $SANDBOX_NAME"
 
 # ══════════════════════════════════════════════════════════════════
-# Phase 1: Sandbox Creation with Messaging Providers
+# Phase 1: Install NemoClaw (non-interactive mode)
 # ══════════════════════════════════════════════════════════════════
-section "Phase 1: Sandbox Creation with Messaging Providers"
+section "Phase 1: Install NemoClaw with messaging tokens"
+
+cd "$REPO" || exit 1
 
 # Pre-cleanup: destroy any leftover sandbox from previous runs
 info "Pre-cleanup..."
 if command -v nemoclaw >/dev/null 2>&1; then
   nemoclaw "$SANDBOX_NAME" destroy --yes 2>/dev/null || true
 fi
-openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
+if command -v openshell >/dev/null 2>&1; then
+  openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
+  openshell gateway destroy -g nemoclaw 2>/dev/null || true
+fi
+pass "Pre-cleanup complete"
 
-# Run onboard with messaging tokens in the environment.
-# The PR #1081 code in createSandbox() detects these tokens and creates
-# OpenShell providers (e2e-msg-provider-telegram-bridge, etc.)
-info "Running nemoclaw onboard with messaging tokens..."
+# Run install.sh --non-interactive which installs Node.js, openshell,
+# NemoClaw, and runs onboard. Messaging tokens are already exported so
+# the onboard step creates providers and attaches them to the sandbox.
+info "Running install.sh --non-interactive..."
+info "This installs Node.js, openshell, NemoClaw, and runs onboard with messaging providers."
+info "Expected duration: 5-10 minutes on first run."
+
 export NEMOCLAW_SANDBOX_NAME="$SANDBOX_NAME"
 export NEMOCLAW_RECREATE_SANDBOX=1
 
-cd "$REPO" || exit 1
-if ! nemoclaw onboard --non-interactive --yes-i-accept-third-party-software 2>&1; then
-  fail "M0: nemoclaw onboard failed"
+INSTALL_LOG="/tmp/nemoclaw-e2e-install.log"
+bash install.sh --non-interactive >"$INSTALL_LOG" 2>&1 &
+install_pid=$!
+tail -f "$INSTALL_LOG" --pid=$install_pid 2>/dev/null &
+tail_pid=$!
+wait $install_pid
+install_exit=$?
+kill $tail_pid 2>/dev/null || true
+wait $tail_pid 2>/dev/null || true
+
+# Source shell profile to pick up nvm/PATH changes from install.sh
+if [ -f "$HOME/.bashrc" ]; then
+  # shellcheck source=/dev/null
+  source "$HOME/.bashrc" 2>/dev/null || true
+fi
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh"
+fi
+if [ -d "$HOME/.local/bin" ] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+if [ $install_exit -eq 0 ]; then
+  pass "M0: install.sh completed (exit 0)"
+else
+  fail "M0: install.sh failed (exit $install_exit)"
+  info "Last 30 lines of install log:"
+  tail -30 "$INSTALL_LOG" 2>/dev/null || true
   exit 1
 fi
-pass "M0: nemoclaw onboard completed successfully"
+
+# Verify tools are on PATH
+if ! command -v openshell >/dev/null 2>&1; then
+  fail "openshell not found on PATH after install"
+  exit 1
+fi
+pass "openshell installed ($(openshell --version 2>&1 || echo unknown))"
+
+if ! command -v nemoclaw >/dev/null 2>&1; then
+  fail "nemoclaw not found on PATH after install"
+  exit 1
+fi
+pass "nemoclaw installed at $(command -v nemoclaw)"
 
 # Verify sandbox is ready
 sandbox_list=$(openshell sandbox list 2>&1 || true)
