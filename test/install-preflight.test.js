@@ -1675,6 +1675,48 @@ exit 0`,
     expect(`${result.stdout}${result.stderr}`).not.toMatch(/curl should not hit the releases API/);
   });
 
+  it("falls back to the legacy root installer when the selected ref predates the versioned payload", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-curl-pipe-legacy-ref-"));
+    const legacyLog = path.join(tmp, "legacy.log");
+    const { fakeBin, prefix } = buildCurlPipeEnv(tmp, {
+      curlStub: `#!/usr/bin/env bash
+/usr/bin/curl "$@"`,
+      gitStub: `#!/usr/bin/env bash
+if [ "$1" = "clone" ]; then
+  target="\${@: -1}"
+  mkdir -p "$target"
+  cat > "$target/install.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\${NEMOCLAW_INSTALL_TAG:-unset}" > "\${LEGACY_LOG_PATH:?}"
+EOS
+  chmod +x "$target/install.sh"
+  exit 0
+fi
+exit 0`,
+    });
+
+    const installerInput = fs.readFileSync(CURL_PIPE_INSTALLER, "utf-8");
+    const result = spawnSync("bash", [], {
+      cwd: tmp,
+      input: installerInput,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmp,
+        PATH: `${fakeBin}:${TEST_SYSTEM_PATH}`,
+        NEMOCLAW_INSTALL_TAG: "v0.0.1",
+        NEMOCLAW_NON_INTERACTIVE: "1",
+        NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1",
+        NPM_PREFIX: prefix,
+        LEGACY_LOG_PATH: legacyLog,
+      },
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.readFileSync(legacyLog, "utf-8")).toMatch(/^v0\.0\.1\s*$/);
+  });
+
   it("resolves the usage notice helper from the cloned source during piped installs", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-curl-pipe-usage-notice-"));
     const { fakeBin, prefix } = buildCurlPipeEnv(tmp, {
@@ -1683,7 +1725,7 @@ exit 0`,
       gitStub: `#!/usr/bin/env bash
 if [ "$1" = "clone" ]; then
   target="\${@: -1}"
-  mkdir -p "$target/nemoclaw" "$target/bin/lib"
+  mkdir -p "$target/nemoclaw" "$target/bin/lib" "$target/scripts/install"
   echo '{"name":"nemoclaw","version":"0.5.0","dependencies":{"openclaw":"2026.3.11"}}' > "$target/package.json"
   echo '{"name":"nemoclaw-plugin","version":"0.5.0"}' > "$target/nemoclaw/package.json"
   cat > "$target/bin/lib/usage-notice.js" <<'EOS'
@@ -1691,6 +1733,12 @@ if [ "$1" = "clone" ]; then
 process.exit(0)
 EOS
   chmod +x "$target/bin/lib/usage-notice.js"
+  cat > "$target/scripts/install/installer.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+node "$NEMOCLAW_REPO_ROOT/bin/lib/usage-notice.js"
+EOS
+  chmod +x "$target/scripts/install/installer.sh"
   exit 0
 fi
 exit 0`,
