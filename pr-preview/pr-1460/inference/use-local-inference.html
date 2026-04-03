@@ -485,7 +485,7 @@ It pulls the selected model, loads it into memory, and validates it before conti
 </section>
 <section id="openai-compatible-server">
 <h2>OpenAI-Compatible Server<a class="headerlink" href="#openai-compatible-server" title="Link to this heading">#</a></h2>
-<p>This is the most flexible path and works with any server that implements <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>, including vLLM, TensorRT-LLM, llama.cpp, LocalAI, and others.</p>
+<p>This option works with any server that implements <code class="docutils literal notranslate"><span class="pre">/v1/chat/completions</span></code>, including vLLM, TensorRT-LLM, llama.cpp, LocalAI, and others.</p>
 <p>Start your model server.
 The examples below use vLLM, but any OpenAI-compatible server works.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vllm<span class="w"> </span>serve<span class="w"> </span>meta-llama/Llama-3.1-8B-Instruct<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
@@ -616,8 +616,8 @@ Refer to <a class="reference internal" href="switch-inference-providers.html"><s
 </div>
 <p>If the provider itself needs to change (for example, switching from vLLM to a cloud API), rerun <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>.</p>
 </section>
-<section id="related-topics">
-<h2>Related Topics<a class="headerlink" href="#related-topics" title="Link to this heading">#</a></h2>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="inference-options.html"><span class="std std-doc">Inference Options</span></a> for the full list of providers available during onboarding.</p></li>
 <li><p><a class="reference internal" href="switch-inference-providers.html"><span class="std std-doc">Switch Inference Models</span></a> for runtime model switching.</p></li>
@@ -695,7 +695,7 @@ Refer to <a class="reference internal" href="switch-inference-providers.html"><s
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-the-configuration">Verify the Configuration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#switch-models-at-runtime">Switch Models at Runtime</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#related-topics">Related Topics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
 </ul>
   </nav></div>
 
