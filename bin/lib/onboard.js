@@ -3171,40 +3171,84 @@ async function setupMessagingChannels() {
     return;
   }
 
-  // Numbered toggle selector — pre-select channels that already have tokens
+  // Single-keypress toggle selector — pre-select channels that already have tokens.
+  // Press 1/2/3 to instantly toggle a channel; press Enter to continue.
   const enabled = new Set(
     MESSAGING_CHANNELS.filter((c) => getMessagingToken(c.envKey)).map((c) => c.name),
   );
 
+  const output = process.stderr;
   const showList = () => {
-    console.log("");
-    console.log("  Available messaging channels:");
+    output.write("\n");
+    output.write("  Available messaging channels:\n");
     MESSAGING_CHANNELS.forEach((ch, i) => {
       const marker = enabled.has(ch.name) ? "●" : "○";
       const status = getMessagingToken(ch.envKey) ? " (configured)" : "";
-      console.log(`    [${i + 1}] ${marker} ${ch.name} — ${ch.description}${status}`);
+      output.write(`    [${i + 1}] ${marker} ${ch.name} — ${ch.description}${status}\n`);
     });
-    console.log("");
+    output.write("\n");
+    output.write("  Press 1-3 to toggle, Enter when done: ");
   };
 
   showList();
 
-  while (true) {
-    const input = (await prompt("  Enter a number to toggle, or press Enter when done: ")).trim();
-    if (input === "") break;
-    const num = parseInt(input, 10);
-    if (isNaN(num) || num < 1 || num > MESSAGING_CHANNELS.length) {
-      console.log(`  Please enter a number between 1 and ${MESSAGING_CHANNELS.length}.`);
-      continue;
+  await new Promise((resolve, reject) => {
+    const input = process.stdin;
+    let rawModeEnabled = false;
+    let finished = false;
+
+    function cleanup() {
+      input.removeListener("data", onData);
+      if (rawModeEnabled && typeof input.setRawMode === "function") {
+        input.setRawMode(false);
+      }
     }
-    const ch = MESSAGING_CHANNELS[num - 1];
-    if (enabled.has(ch.name)) {
-      enabled.delete(ch.name);
-    } else {
-      enabled.add(ch.name);
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      output.write("\n");
+      resolve();
     }
-    showList();
-  }
+
+    function onData(chunk) {
+      const text = chunk.toString("utf8");
+      for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === "\u0003") {
+          cleanup();
+          reject(Object.assign(new Error("Prompt interrupted"), { code: "SIGINT" }));
+          process.kill(process.pid, "SIGINT");
+          return;
+        }
+        if (ch === "\r" || ch === "\n") {
+          finish();
+          return;
+        }
+        const num = parseInt(ch, 10);
+        if (num >= 1 && num <= MESSAGING_CHANNELS.length) {
+          const channel = MESSAGING_CHANNELS[num - 1];
+          if (enabled.has(channel.name)) {
+            enabled.delete(channel.name);
+          } else {
+            enabled.add(channel.name);
+          }
+          showList();
+        }
+      }
+    }
+
+    input.setEncoding("utf8");
+    if (typeof input.resume === "function") {
+      input.resume();
+    }
+    if (typeof input.setRawMode === "function") {
+      input.setRawMode(true);
+      rawModeEnabled = true;
+    }
+    input.on("data", onData);
+  });
 
   const selected = Array.from(enabled);
   if (selected.length === 0) {
