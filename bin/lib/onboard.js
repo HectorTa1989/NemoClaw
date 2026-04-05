@@ -1235,6 +1235,7 @@ function patchStagedDockerfile(
   preferredInferenceApi = null,
   webSearchConfig = null,
   messagingChannels = [],
+  messagingAllowedIds = {},
 ) {
   const { providerKey, primaryModelRef, inferenceBaseUrl, inferenceApi, inferenceCompat } =
     getSandboxInferenceConfig(model, provider, preferredInferenceApi);
@@ -1282,6 +1283,12 @@ function patchStagedDockerfile(
     dockerfile = dockerfile.replace(
       /^ARG NEMOCLAW_MESSAGING_CHANNELS_B64=.*$/m,
       `ARG NEMOCLAW_MESSAGING_CHANNELS_B64=${encodeDockerJsonArg(messagingChannels)}`,
+    );
+  }
+  if (Object.keys(messagingAllowedIds).length > 0) {
+    dockerfile = dockerfile.replace(
+      /^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*$/m,
+      `ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${encodeDockerJsonArg(messagingAllowedIds)}`,
     );
   }
   fs.writeFileSync(dockerfilePath, dockerfile);
@@ -2635,6 +2642,19 @@ async function createSandbox(
       return null;
     })
     .filter(Boolean);
+  // Build allowed sender IDs map from env vars set during the messaging prompt.
+  // Each channel with a userIdEnvKey in MESSAGING_CHANNELS may have a
+  // comma-separated list of IDs (e.g. TELEGRAM_ALLOWED_IDS="123,456").
+  const messagingAllowedIds = {};
+  for (const ch of MESSAGING_CHANNELS) {
+    if (ch.userIdEnvKey && process.env[ch.userIdEnvKey]) {
+      const ids = process.env[ch.userIdEnvKey]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (ids.length > 0) messagingAllowedIds[ch.name] = ids;
+    }
+  }
   patchStagedDockerfile(
     stagedDockerfile,
     model,
@@ -2644,6 +2664,7 @@ async function createSandbox(
     preferredInferenceApi,
     webSearchConfig,
     activeMessagingChannels,
+    messagingAllowedIds,
   );
   // Only pass non-sensitive env vars to the sandbox. Credentials flow through
   // OpenShell providers — the gateway injects them as placeholders and the L7
@@ -3515,6 +3536,9 @@ const MESSAGING_CHANNELS = [
     description: "Telegram bot messaging",
     help: "Create a bot via @BotFather on Telegram, then copy the token.",
     label: "Telegram Bot Token",
+    userIdEnvKey: "TELEGRAM_ALLOWED_IDS",
+    userIdHelp: "Send /start to @userinfobot on Telegram to get your numeric user ID.",
+    userIdLabel: "Telegram User ID (for DM access)",
   },
   {
     name: "discord",
@@ -3651,17 +3675,34 @@ async function setupMessagingChannels() {
     }
     if (getMessagingToken(ch.envKey)) {
       console.log(`  ✓ ${ch.name} — already configured`);
-      continue;
-    }
-    console.log("");
-    console.log(`  ${ch.help}`);
-    const token = normalizeCredentialValue(await prompt(`  ${ch.label}: `, { secret: true }));
-    if (token) {
-      saveCredential(ch.envKey, token);
-      process.env[ch.envKey] = token;
-      console.log(`  ✓ ${ch.name} token saved`);
     } else {
-      console.log(`  Skipped ${ch.name} (no token entered)`);
+      console.log("");
+      console.log(`  ${ch.help}`);
+      const token = normalizeCredentialValue(await prompt(`  ${ch.label}: `, { secret: true }));
+      if (token) {
+        saveCredential(ch.envKey, token);
+        process.env[ch.envKey] = token;
+        console.log(`  ✓ ${ch.name} token saved`);
+      } else {
+        console.log(`  Skipped ${ch.name} (no token entered)`);
+        continue;
+      }
+    }
+    // Prompt for user/sender ID if the channel supports DM allowlisting
+    if (ch.userIdEnvKey) {
+      const existingIds = process.env[ch.userIdEnvKey] || "";
+      if (existingIds) {
+        console.log(`  ✓ ${ch.name} — allowed IDs already set: ${existingIds}`);
+      } else {
+        console.log(`  ${ch.userIdHelp}`);
+        const userId = (await prompt(`  ${ch.userIdLabel}: `)).trim();
+        if (userId) {
+          process.env[ch.userIdEnvKey] = userId;
+          console.log(`  ✓ ${ch.name} user ID saved`);
+        } else {
+          console.log(`  Skipped ${ch.name} user ID (bot will require manual pairing)`);
+        }
+      }
     }
   }
   console.log("");

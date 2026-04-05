@@ -59,6 +59,10 @@ ARG NEMOCLAW_WEB_CONFIG_B64=e30=
 # (e.g. ["discord","telegram"]). Channels are added with placeholder tokens
 # so the L7 proxy can rewrite them at egress. Default: empty list.
 ARG NEMOCLAW_MESSAGING_CHANNELS_B64=W10=
+# Base64-encoded JSON map of channel→allowed sender IDs for DM allowlisting
+# (e.g. {"telegram":["123456789"]}). Channels with IDs get dmPolicy=allowlist;
+# channels without IDs keep the OpenClaw default (pairing). Default: empty map.
+ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=e30=
 # Set to "1" to disable device-pairing auth (development/headless only).
 # Default: "0" (device auth enabled — secure by default).
 ARG NEMOCLAW_DISABLE_DEVICE_AUTH=0
@@ -78,6 +82,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     NEMOCLAW_INFERENCE_COMPAT_B64=${NEMOCLAW_INFERENCE_COMPAT_B64} \
     NEMOCLAW_WEB_CONFIG_B64=${NEMOCLAW_WEB_CONFIG_B64} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
+    NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${NEMOCLAW_MESSAGING_ALLOWED_IDS_B64} \
     NEMOCLAW_DISABLE_DEVICE_AUTH=${NEMOCLAW_DISABLE_DEVICE_AUTH}
 
 WORKDIR /sandbox
@@ -100,9 +105,10 @@ inference_api = os.environ['NEMOCLAW_INFERENCE_API']; \
 inference_compat = json.loads(base64.b64decode(os.environ['NEMOCLAW_INFERENCE_COMPAT_B64']).decode('utf-8')); \
 web_config = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_WEB_CONFIG_B64', 'e30=') or 'e30=').decode('utf-8')); \
 msg_channels = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_CHANNELS_B64', 'W10=') or 'W10=').decode('utf-8')); \
+_allowed_ids = json.loads(base64.b64decode(os.environ.get('NEMOCLAW_MESSAGING_ALLOWED_IDS_B64', 'e30=') or 'e30=').decode('utf-8')); \
 _token_keys = {'discord': 'token', 'telegram': 'botToken', 'slack': 'botToken'}; \
 _env_keys = {'discord': 'DISCORD_BOT_TOKEN', 'telegram': 'TELEGRAM_BOT_TOKEN', 'slack': 'SLACK_BOT_TOKEN'}; \
-_ch_cfg = {ch: {'accounts': {'main': {_token_keys[ch]: f'openshell:resolve:env:{_env_keys[ch]}', 'enabled': True}}} for ch in msg_channels if ch in _token_keys}; \
+_ch_cfg = {ch: {'accounts': {'main': {_token_keys[ch]: f'openshell:resolve:env:{_env_keys[ch]}', 'enabled': True, **({'dmPolicy': 'allowlist', 'allowFrom': _allowed_ids[ch]} if ch in _allowed_ids and _allowed_ids[ch] else {})}}} for ch in msg_channels if ch in _token_keys}; \
 parsed = urlparse(chat_ui_url); \
 chat_origin = f'{parsed.scheme}://{parsed.netloc}' if parsed.scheme and parsed.netloc else 'http://127.0.0.1:18789'; \
 origins = ['http://127.0.0.1:18789']; \
