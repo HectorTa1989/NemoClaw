@@ -4577,6 +4577,7 @@ module.exports = {
   startGatewayForRecovery,
   runCaptureOpenshell,
   setupInference,
+  setupMessagingChannels,
   setupNim,
   isInferenceRouteReady,
   isOpenclawReady,
