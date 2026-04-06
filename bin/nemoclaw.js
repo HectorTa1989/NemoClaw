@@ -40,6 +40,7 @@ const { getVersion } = require("./lib/version");
 const onboardSession = require("./lib/onboard-session");
 const { parseLiveSandboxNames } = require("./lib/runtime-recovery");
 const { NOTICE_ACCEPT_ENV, NOTICE_ACCEPT_FLAG } = require("./lib/usage-notice");
+const { runDebugCommand } = require("../dist/lib/debug-command");
 const { executeDeploy } = require("../dist/lib/deploy");
 
 // ── Global commands ──────────────────────────────────────────────
@@ -849,47 +850,13 @@ function stop() {
 
 function debug(args) {
   const { runDebug } = require("./lib/debug");
-  const opts = {};
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "--help":
-      case "-h":
-        console.log("Collect NemoClaw diagnostic information\n");
-        console.log("Usage: nemoclaw debug [--quick] [--output FILE] [--sandbox NAME]\n");
-        console.log("Options:");
-        console.log("  --quick, -q        Only collect minimal diagnostics");
-        console.log("  --output, -o FILE  Write a tarball to FILE");
-        console.log("  --sandbox NAME     Target sandbox name");
-        process.exit(0);
-        break;
-      case "--quick":
-      case "-q":
-        opts.quick = true;
-        break;
-      case "--output":
-      case "-o":
-        if (!args[i + 1] || args[i + 1].startsWith("-")) {
-          console.error("Error: --output requires a file path argument");
-          process.exit(1);
-        }
-        opts.output = args[++i];
-        break;
-      case "--sandbox":
-        if (!args[i + 1] || args[i + 1].startsWith("-")) {
-          console.error("Error: --sandbox requires a name argument");
-          process.exit(1);
-        }
-        opts.sandboxName = args[++i];
-        break;
-      default:
-        console.error(`Unknown option: ${args[i]}`);
-        process.exit(1);
-    }
-  }
-  if (!opts.sandboxName) {
-    opts.sandboxName = registry.listSandboxes().defaultSandbox || undefined;
-  }
-  runDebug(opts);
+  runDebugCommand(args, {
+    getDefaultSandbox: () => registry.listSandboxes().defaultSandbox || undefined,
+    runDebug,
+    log: console.log,
+    error: console.error,
+    exit: (code) => process.exit(code),
+  });
 }
 
 function uninstall(args) {
