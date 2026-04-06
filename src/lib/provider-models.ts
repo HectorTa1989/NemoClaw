@@ -57,7 +57,16 @@ export function fetchNvidiaEndpointModels(
         curlStatus: result.curlStatus,
       };
     }
-    return { ok: true, ids: parseModelIds(result.body) };
+    try {
+      return { ok: true, ids: parseModelIds(result.body) };
+    } catch (error) {
+      return {
+        ok: false,
+        httpStatus: result.httpStatus,
+        curlStatus: result.curlStatus,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   } catch (error) {
     return {
       ok: false,
@@ -115,7 +124,16 @@ export function fetchOpenAiLikeModels(
         message: result.message,
       };
     }
-    return { ok: true, ids: parseModelIds(result.body) };
+    try {
+      return { ok: true, ids: parseModelIds(result.body) };
+    } catch (error) {
+      return {
+        ok: false,
+        httpStatus: result.httpStatus,
+        curlStatus: result.curlStatus,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   } catch (error) {
     return {
       ok: false,
@@ -150,7 +168,16 @@ export function fetchAnthropicModels(
         message: result.message,
       };
     }
-    return { ok: true, ids: parseModelIds(result.body, ["id", "name"]) };
+    try {
+      return { ok: true, ids: parseModelIds(result.body, ["id", "name"]) };
+    } catch (error) {
+      return {
+        ok: false,
+        httpStatus: result.httpStatus,
+        curlStatus: result.curlStatus,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   } catch (error) {
     return {
       ok: false,

@@ -134,4 +134,24 @@ describe("provider model helpers", () => {
 
     expect(result).toEqual({ ok: true, ids: ["claude-sonnet-4-6", "claude-haiku-4-5"] });
   });
+
+  it("preserves probe status when model catalog JSON parsing fails", () => {
+    const result = fetchOpenAiLikeModels("https://example.test/v1", "sk-x", {
+      runCurlProbeImpl: () => ({
+        ok: true,
+        httpStatus: 502,
+        curlStatus: 7,
+        body: "not-json",
+        stderr: "",
+        message: "",
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      httpStatus: 502,
+      curlStatus: 7,
+      message: expect.stringMatching(/JSON|Unexpected token|not-json/i),
+    });
+  });
 });
