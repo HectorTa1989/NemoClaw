@@ -1223,7 +1223,9 @@ async function sandboxDestroy(sandboxName, args = []) {
     console.log(`  ${YW}Destroy sandbox '${sandboxName}'?${R}`);
     console.log("  This will permanently delete the sandbox and all workspace files inside it.");
     console.log("  This cannot be undone.");
-    const answer = await askPrompt("  Type 'yes' to confirm, or press Enter to cancel [y/N]: ");
+    const answer = await askPrompt(
+      "  Type 'y' or 'yes' to confirm, or press Enter to cancel [y/N]: ",
+    );
     if (answer.trim().toLowerCase() !== "y" && answer.trim().toLowerCase() !== "yes") {
       console.log("  Cancelled.");
       return;
