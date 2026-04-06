@@ -169,4 +169,24 @@ describe("provider model helpers", () => {
       message: expect.stringMatching(/JSON|Unexpected token|not-json/i),
     });
   });
+
+  it("fails fast when the model catalog payload omits the top-level data array", () => {
+    const result = fetchOpenAiLikeModels("https://example.test/v1", "sk-x", {
+      runCurlProbeImpl: () => ({
+        ok: true,
+        httpStatus: 200,
+        curlStatus: 0,
+        body: JSON.stringify({ error: { message: "bad payload" } }),
+        stderr: "",
+        message: "",
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      httpStatus: 200,
+      curlStatus: 0,
+      message: "Unexpected model catalog response: expected a top-level data array",
+    });
+  });
 });

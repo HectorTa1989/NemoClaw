@@ -18,7 +18,9 @@ export interface ProviderModelOptions {
 
 function parseModelIds(body: string, itemKeys: string[] = ["id"]): string[] {
   const parsed = JSON.parse(body) as { data?: Array<Record<string, unknown> | null> };
-  if (!Array.isArray(parsed?.data)) return [];
+  if (!Array.isArray(parsed?.data)) {
+    throw new Error("Unexpected model catalog response: expected a top-level data array");
+  }
   return parsed.data
     .map((item) => {
       if (!item) return null;
