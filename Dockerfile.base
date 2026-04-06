@@ -104,6 +104,8 @@ RUN mkdir -p /sandbox/.openclaw-data/agents/main/agent \
         /sandbox/.openclaw-data/memory \
         /sandbox/.openclaw-data/telegram \
         /sandbox/.openclaw-data/credentials \
+        /sandbox/.openclaw-data/flows \
+        /sandbox/.openclaw-data/logs \
     && mkdir -p /sandbox/.openclaw \
     && ln -s /sandbox/.openclaw-data/agents /sandbox/.openclaw/agents \
     && ln -s /sandbox/.openclaw-data/extensions /sandbox/.openclaw/extensions \
@@ -121,9 +123,11 @@ RUN mkdir -p /sandbox/.openclaw-data/agents/main/agent \
     && ln -s /sandbox/.openclaw-data/exec-approvals.json /sandbox/.openclaw/exec-approvals.json \
     && ln -s /sandbox/.openclaw-data/telegram /sandbox/.openclaw/telegram \
     && ln -s /sandbox/.openclaw-data/credentials /sandbox/.openclaw/credentials \
+    && ln -s /sandbox/.openclaw-data/flows /sandbox/.openclaw/flows \
+    && ln -s /sandbox/.openclaw-data/logs /sandbox/.openclaw/logs \
     && chown -R sandbox:sandbox /sandbox/.openclaw /sandbox/.openclaw-data
 
 # Install OpenClaw CLI + PyYAML for inline Python scripts in e2e tests.
 # When bumping the openclaw version, rebuild this base image.
-RUN npm install -g openclaw@2026.3.11 \
+RUN npm install -g openclaw@2026.4.2 \
     && pip3 install --no-cache-dir --break-system-packages "pyyaml==6.0.3"
