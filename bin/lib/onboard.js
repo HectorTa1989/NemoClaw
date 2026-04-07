@@ -1529,6 +1529,7 @@ async function preflight() {
   // Podman is now supported — no unsupported runtime warning needed.
   if (host.notes.includes("Running under WSL")) {
     console.log("  ⓘ Running under WSL");
+  }
 
   // OpenShell CLI
   let openshellInstall = { localBin: null, futureShellPathHint: null };
