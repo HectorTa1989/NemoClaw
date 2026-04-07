@@ -1548,7 +1548,9 @@ async function preflight() {
     console.log("  ⓘ Running under WSL");
   }
 
-  // OpenShell CLI
+  // OpenShell CLI — install if missing, upgrade if below minimum version.
+  // MIN_VERSION in install-openshell.sh handles the version gate; calling it
+  // when openshell already exists is safe (it exits early if version is OK).
   let openshellInstall = { localBin: null, futureShellPathHint: null };
   if (!isOpenshellInstalled()) {
     console.log("  openshell CLI not found. Installing...");
@@ -1557,6 +1559,29 @@ async function preflight() {
       console.error("  Failed to install openshell CLI.");
       console.error("  Install manually: https://github.com/NVIDIA/OpenShell/releases");
       process.exit(1);
+    }
+  } else {
+    // Ensure the installed version meets the minimum required by install-openshell.sh.
+    // The script itself is idempotent — it exits early if the version is already sufficient.
+    const currentVersion = getInstalledOpenshellVersion();
+    if (currentVersion) {
+      const parts = currentVersion.split(".").map(Number);
+      const minParts = [0, 0, 24]; // must match MIN_VERSION in scripts/install-openshell.sh
+      const needsUpgrade =
+        parts[0] < minParts[0] ||
+        (parts[0] === minParts[0] && parts[1] < minParts[1]) ||
+        (parts[0] === minParts[0] && parts[1] === minParts[1] && parts[2] < minParts[2]);
+      if (needsUpgrade) {
+        console.log(
+          `  openshell ${currentVersion} is below minimum required version. Upgrading...`,
+        );
+        openshellInstall = installOpenshell();
+        if (!openshellInstall.installed) {
+          console.error("  Failed to upgrade openshell CLI.");
+          console.error("  Install manually: https://github.com/NVIDIA/OpenShell/releases");
+          process.exit(1);
+        }
+      }
     }
   }
   console.log(
