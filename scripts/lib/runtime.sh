@@ -77,7 +77,7 @@ docker_host_runtime() {
     unix://*"/.colima/default/docker.sock" | unix://*"/.config/colima/default/docker.sock")
       printf 'colima\n'
       ;;
-    unix://*"/podman/machine/podman.sock"|unix://*"/podman/podman.sock")
+    unix://*"/podman/machine/podman.sock" | unix://*"/podman/podman.sock")
       printf 'podman\n'
       ;;
     unix://*"/.docker/run/docker.sock")
@@ -119,8 +119,7 @@ find_podman_socket() {
   if [ "$(uname -s)" = "Darwin" ]; then
     for socket_path in \
       "$home_dir/.local/share/containers/podman/machine/podman.sock" \
-      "/var/run/docker.sock"
-    do
+      "/var/run/docker.sock"; do
       if socket_exists "$socket_path"; then
         printf '%s\n' "$socket_path"
         return 0
@@ -134,8 +133,7 @@ find_podman_socket() {
     for socket_path in \
       "$xdg_sock" \
       "/run/user/$uid/podman/podman.sock" \
-      "/run/podman/podman.sock"
-    do
+      "/run/podman/podman.sock"; do
       if socket_exists "$socket_path"; then
         printf '%s\n' "$socket_path"
         return 0

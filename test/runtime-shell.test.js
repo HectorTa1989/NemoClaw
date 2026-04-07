@@ -127,13 +127,17 @@ describe("shell runtime helpers", () => {
   });
 
   it("classifies a Podman DOCKER_HOST correctly", () => {
-    const result = runShell(`source "${RUNTIME_SH}"; docker_host_runtime "unix:///run/user/1000/podman/podman.sock"`);
+    const result = runShell(
+      `source "${RUNTIME_SH}"; docker_host_runtime "unix:///run/user/1000/podman/podman.sock"`,
+    );
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("podman");
   });
 
   it("classifies a Podman machine socket correctly", () => {
-    const result = runShell(`source "${RUNTIME_SH}"; docker_host_runtime "unix:///Users/test/.local/share/containers/podman/machine/podman.sock"`);
+    const result = runShell(
+      `source "${RUNTIME_SH}"; docker_host_runtime "unix:///Users/test/.local/share/containers/podman/machine/podman.sock"`,
+    );
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("podman");
   });
