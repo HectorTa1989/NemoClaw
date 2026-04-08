@@ -22,6 +22,8 @@ import {
   SCORE_REVIEW_READY,
   SCORE_NEAR_MISS,
   SCORE_SECURITY_ACTIONABLE,
+  SCORE_LABEL_SECURITY,
+  SCORE_LABEL_PRIORITY_HIGH,
   SCORE_STALE_AGE,
   PENALTY_DRAFT_OR_CONFLICT,
   PENALTY_CODERABBIT_MAJOR,
@@ -302,7 +304,7 @@ function loadState(): StateFile | null {
 function scoreItem(
   item: ClassifiedPr,
   riskyFiles: string[],
-): { score: number; bucket: "ready-now" | "salvage-now" | "blocked"; nextAction: string } {
+): { score: number; bucket: "merge-now" | "review-ready" | "salvage-now" | "blocked"; nextAction: string } {
   let score = 0;
   let bucket: "merge-now" | "review-ready" | "salvage-now" | "blocked" = "blocked";
   let nextAction = "review";
@@ -323,8 +325,13 @@ function scoreItem(
 
   if (riskyFiles.length > 0 && bucket !== "blocked") {
     score += SCORE_SECURITY_ACTIONABLE;
-    nextAction = bucket === "ready-now" ? "security-sweep → merge-gate" : "security-sweep → salvage-pr";
+    nextAction = bucket === "merge-now" ? "security-sweep → merge-gate" : "security-sweep → review";
   }
+
+  // GitHub label boosts
+  const labelSet = new Set(item.labels.map((l) => l.toLowerCase()));
+  if (labelSet.has("security")) score += SCORE_LABEL_SECURITY;
+  if (labelSet.has("priority: high")) score += SCORE_LABEL_PRIORITY_HIGH;
 
   if (item.updatedAt) {
     const age = Date.now() - new Date(item.updatedAt).getTime();
