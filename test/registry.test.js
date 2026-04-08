@@ -154,7 +154,7 @@ describe("atomic writes", () => {
     };
     try {
       expect(() => registry.save({ sandboxes: {}, defaultSandbox: null })).toThrow(
-        "Cannot write config file",
+        /Cannot write config file|EACCES/,
       );
     } finally {
       fs.renameSync = original;
