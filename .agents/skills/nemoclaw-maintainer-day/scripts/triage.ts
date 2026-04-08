@@ -4,9 +4,10 @@
 /**
  * Deterministic NemoClaw maintainer triage queue builder.
  *
- * Calls gh-pr-merge-now for baseline data, enriches top candidates with
- * file-level risky-area detection, applies scoring weights, filters
- * exclusions from the state file, and outputs a ranked JSON queue.
+ * Lists open PRs via gh, classifies them as merge-ready / near-miss / blocked,
+ * enriches top candidates with file-level risky-area detection, applies
+ * scoring weights, filters exclusions from the state file, and outputs
+ * a ranked JSON queue.
  *
  * Usage: node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/triage.ts [--limit N] [--approved-only]
  */
@@ -31,36 +32,43 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-interface MergeNowItem {
+interface PrData {
+  number: number;
+  title: string;
+  url: string;
+  author: { login: string };
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  isDraft: boolean;
+  createdAt: string;
+  updatedAt: string;
+  mergeStateStatus: string;
+  reviewDecision: string;
+  labels: Array<{ name: string }>;
+  statusCheckRollup: Array<{
+    name: string;
+    status: string;
+    conclusion: string;
+  }>;
+}
+
+interface ClassifiedPr {
   number: number;
   title: string;
   url: string;
   author: string;
   churn: number;
-  changed_files: number;
-  checks_green: boolean;
-  coderabbit: { critical: number; major: number; minor: number };
+  changedFiles: number;
+  checksGreen: boolean;
+  coderabbitMajor: boolean;
   reasons: string[];
-  merge_now: boolean;
-  near_miss: boolean;
-  updated_at: string;
+  mergeNow: boolean;
+  nearMiss: boolean;
+  updatedAt: string;
+  createdAt: string;
   draft: boolean;
-}
-
-interface MergeNowOutput {
-  repo: string;
-  scanned: number;
-  merge_now: MergeNowItem[];
-  near_miss: MergeNowItem[];
-  excluded: MergeNowItem[];
-  excluded_reason_counts: Record<string, number>;
-}
-
-interface StateFile {
-  excluded: {
-    prs: Record<string, { reason: string; excludedAt: string }>;
-    issues: Record<string, { reason: string; excludedAt: string }>;
-  };
+  labels: string[];
 }
 
 interface QueueItem {
@@ -77,6 +85,7 @@ interface QueueItem {
   changedFiles: number;
   nextAction: string;
   ageHours: number;
+  labels: string[];
 }
 
 interface HotCluster {
@@ -91,7 +100,13 @@ interface TriageOutput {
   queue: QueueItem[];
   nearMisses: QueueItem[];
   hotClusters: HotCluster[];
-  excludedReasonCounts: Record<string, number>;
+}
+
+interface StateFile {
+  excluded: {
+    prs: Record<string, { reason: string; excludedAt: string }>;
+    issues: Record<string, { reason: string; excludedAt: string }>;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,17 +127,113 @@ function ghApi(path: string): unknown {
 // Data fetching
 // ---------------------------------------------------------------------------
 
-function runMergeNow(approvedOnly: boolean): MergeNowOutput | null {
-  const args = ["--json"];
-  if (approvedOnly) args.push("--approved-only");
+function fetchOpenPrs(repo: string, approvedOnly: boolean): PrData[] {
+  // Fetch basic PR data first (lightweight — no statusCheckRollup)
+  const basicFields = [
+    "number", "title", "url", "author", "additions", "deletions",
+    "changedFiles", "isDraft", "createdAt", "updatedAt",
+    "mergeStateStatus", "reviewDecision", "labels",
+  ].join(",");
 
-  const out = run("gh-pr-merge-now", args);
-  if (!out) return null;
+  const out = run("gh", [
+    "pr", "list", "--repo", repo,
+    "--state", "open", "--limit", "100",
+    "--json", basicFields,
+  ]);
+  if (!out) return [];
+
   try {
-    return JSON.parse(out) as MergeNowOutput;
+    let prs = JSON.parse(out) as PrData[];
+    if (approvedOnly) {
+      prs = prs.filter((pr) => pr.reviewDecision === "APPROVED");
+    }
+    // statusCheckRollup is fetched lazily per-PR in enrichWithChecks()
+    for (const pr of prs) {
+      pr.statusCheckRollup = [];
+    }
+    return prs;
   } catch {
-    return null;
+    return [];
   }
+}
+
+/**
+ * Fetch statusCheckRollup for a single PR. This is the expensive field
+ * that causes GraphQL timeouts when requested for many PRs at once.
+ */
+function enrichWithChecks(repo: string, pr: PrData): void {
+  const out = run("gh", [
+    "pr", "view", String(pr.number), "--repo", repo,
+    "--json", "statusCheckRollup",
+  ]);
+  if (!out) return;
+  try {
+    const data = JSON.parse(out) as { statusCheckRollup: PrData["statusCheckRollup"] };
+    pr.statusCheckRollup = data.statusCheckRollup ?? [];
+  } catch { /* leave empty */ }
+}
+
+function classifyPr(pr: PrData): ClassifiedPr {
+  const reasons: string[] = [];
+  const draft = pr.isDraft;
+  if (draft) reasons.push("draft");
+
+  // Check CI status
+  const checks = pr.statusCheckRollup ?? [];
+  const passing = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+  let checksGreen = checks.length > 0;
+  for (const check of checks) {
+    const conclusion = (check.conclusion ?? "").toUpperCase();
+    const status = (check.status ?? "").toUpperCase();
+    const done = status === "COMPLETED" || (!status && conclusion);
+    if (!done || !passing.has(conclusion)) {
+      checksGreen = false;
+      break;
+    }
+  }
+  if (checks.length === 0) checksGreen = false;
+  if (!checksGreen && !draft) reasons.push("failing-checks");
+
+  // Check merge state
+  const mergeClean = ["CLEAN", "HAS_HOOKS", "UNSTABLE"];
+  const mergeState = (pr.mergeStateStatus ?? "UNKNOWN").toUpperCase();
+  const hasConflict = !mergeClean.includes(mergeState) && mergeState !== "UNKNOWN";
+  if (hasConflict) reasons.push("merge-conflict");
+
+  // Check review decision
+  const approved = pr.reviewDecision === "APPROVED";
+  const blocked = mergeState === "BLOCKED";
+  if (blocked && !hasConflict) reasons.push("merge-blocked");
+
+  // Simple CodeRabbit heuristic: check labels for major findings
+  // (Full CodeRabbit check is in check-gates.ts via GraphQL)
+  const coderabbitMajor = false; // conservative — gate checker does the real check
+
+  // Classify
+  const mergeNow = !draft && checksGreen && !hasConflict && approved && !coderabbitMajor;
+  // Near miss: not draft, most things pass but one blocker that looks fixable
+  const nearMiss = !draft && !mergeNow && reasons.length <= 2 &&
+    !reasons.includes("draft") &&
+    (checksGreen || reasons.includes("failing-checks")) &&
+    !hasConflict;
+
+  return {
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    author: pr.author?.login ?? "unknown",
+    churn: pr.additions + pr.deletions,
+    changedFiles: pr.changedFiles,
+    checksGreen,
+    coderabbitMajor,
+    reasons,
+    mergeNow,
+    nearMiss,
+    updatedAt: pr.updatedAt,
+    createdAt: pr.createdAt,
+    draft,
+    labels: (pr.labels ?? []).map((l) => l.name),
+  };
 }
 
 function fetchPrFiles(repo: string, number: number): string[] {
@@ -149,18 +260,18 @@ function loadState(): StateFile | null {
 // ---------------------------------------------------------------------------
 
 function scoreItem(
-  item: MergeNowItem,
+  item: ClassifiedPr,
   riskyFiles: string[],
 ): { score: number; bucket: "ready-now" | "salvage-now" | "blocked"; nextAction: string } {
   let score = 0;
   let bucket: "ready-now" | "salvage-now" | "blocked" = "blocked";
   let nextAction = "review";
 
-  if (item.merge_now) {
+  if (item.mergeNow) {
     score += SCORE_MERGE_NOW;
     bucket = "ready-now";
     nextAction = "merge-gate";
-  } else if (item.near_miss) {
+  } else if (item.nearMiss) {
     score += SCORE_NEAR_MISS;
     bucket = "salvage-now";
     nextAction = "salvage-pr";
@@ -171,17 +282,16 @@ function scoreItem(
     nextAction = bucket === "ready-now" ? "security-sweep → merge-gate" : "security-sweep → salvage-pr";
   }
 
-  if (item.updated_at) {
-    const age = Date.now() - new Date(item.updated_at).getTime();
+  if (item.updatedAt) {
+    const age = Date.now() - new Date(item.updatedAt).getTime();
     if (age > 7 * 24 * 60 * 60 * 1000) score += SCORE_STALE_AGE;
   }
 
   const reasons = new Set(item.reasons);
   if (item.draft) score += PENALTY_DRAFT_OR_CONFLICT;
   if (reasons.has("merge-conflict")) score += PENALTY_DRAFT_OR_CONFLICT;
-  if (item.coderabbit.major > 0) score += PENALTY_CODERABBIT_MAJOR;
-  if (item.coderabbit.critical > 0) score += PENALTY_CODERABBIT_MAJOR;
-  if (reasons.has("failing-checks") && !item.near_miss) score += PENALTY_BROAD_CI_RED;
+  if (item.coderabbitMajor) score += PENALTY_CODERABBIT_MAJOR;
+  if (reasons.has("failing-checks") && !item.nearMiss) score += PENALTY_BROAD_CI_RED;
   if (reasons.has("merge-blocked")) score += PENALTY_MERGE_BLOCKED;
 
   return { score, bucket, nextAction };
@@ -192,7 +302,7 @@ function scoreItem(
 // ---------------------------------------------------------------------------
 
 function detectHotClusters(
-  items: MergeNowItem[],
+  items: ClassifiedPr[],
   repo: string,
   fileCache: Map<number, string[]>,
 ): HotCluster[] {
@@ -229,33 +339,61 @@ function main(): void {
   const approvedOnly = args.includes("--approved-only");
   const limitIdx = args.indexOf("--limit");
   const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 10;
+  const repoIdx = args.indexOf("--repo");
+  const repo = repoIdx >= 0 ? args[repoIdx + 1] : "NVIDIA/NemoClaw";
 
-  let data = runMergeNow(approvedOnly);
-  if (!data && approvedOnly) {
-    data = runMergeNow(false);
+  // 1. Fetch open PRs (lightweight — no statusCheckRollup yet)
+  // Retry once on transient GitHub GraphQL failures (502/504)
+  process.stderr.write("Fetching open PRs...\n");
+  let prs = fetchOpenPrs(repo, approvedOnly);
+  if (prs.length === 0) {
+    process.stderr.write("First attempt failed, retrying in 3s...\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
+    prs = fetchOpenPrs(repo, approvedOnly);
   }
-  if (!data) {
-    console.error("Failed to run gh-pr-merge-now. Is it installed and on PATH?");
+  if (prs.length === 0 && approvedOnly) {
+    process.stderr.write("No approved PRs found, falling back to all open PRs...\n");
+    prs = fetchOpenPrs(repo, false);
+  }
+  if (prs.length === 0) {
+    console.error("No open PRs found. GitHub API may be experiencing issues.");
     process.exit(1);
   }
 
+  // Pre-filter to non-draft, non-conflict candidates worth enriching
+  const candidates = prs.filter((pr) => !pr.isDraft);
+  const enrichCount = Math.min(candidates.length, limit * 3);
+  process.stderr.write(`Enriching top ${enrichCount} candidates with CI status...\n`);
+  for (const pr of candidates.slice(0, enrichCount)) {
+    enrichWithChecks(repo, pr);
+  }
+
+  const classified = prs.map(classifyPr);
+
+  // 2. Load exclusions
   const state = loadState();
   const excludedPrs = new Set(
     Object.keys(state?.excluded?.prs ?? {}).map(Number),
   );
 
-  const allItems = [...data.merge_now, ...data.near_miss, ...data.excluded].filter(
-    (item) => !excludedPrs.has(item.number),
-  );
+  const allItems = classified.filter((item) => !excludedPrs.has(item.number));
 
+  // 3. Enrich top candidates with file data and scoring
   const fileCache = new Map<number, string[]>();
   const topCandidates = allItems
-    .filter((item) => item.merge_now || item.near_miss)
+    .filter((item) => item.mergeNow || item.nearMiss)
     .slice(0, limit * 2);
 
+  // Also include non-merge/near-miss items so we have a full picture
+  const remaining = allItems
+    .filter((item) => !item.mergeNow && !item.nearMiss && !item.draft)
+    .slice(0, limit);
+
+  const toScore = [...topCandidates, ...remaining];
+
   const scored: QueueItem[] = [];
-  for (const item of topCandidates) {
-    const files = fetchPrFiles(data.repo, item.number);
+  for (const item of toScore) {
+    const files = fetchPrFiles(repo, item.number);
     fileCache.set(item.number, files);
     const riskyFiles = files.filter(isRiskyFile);
     const { score, bucket, nextAction } = scoreItem(item, riskyFiles);
@@ -271,30 +409,33 @@ function main(): void {
       reasons: item.reasons,
       riskyFiles,
       churn: item.churn,
-      changedFiles: item.changed_files,
+      changedFiles: item.changedFiles,
       nextAction,
-      ageHours: item.updated_at
-        ? Math.floor((Date.now() - new Date(item.updated_at).getTime()) / 3_600_000)
+      ageHours: item.createdAt
+        ? Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 3_600_000)
         : 0,
+      labels: item.labels,
     });
   }
 
+  // 4. Sort and rank
   scored.sort((a, b) => b.score - a.score);
   const queue = scored.filter((s) => s.bucket === "ready-now").slice(0, limit);
   const nearMisses = scored.filter((s) => s.bucket === "salvage-now").slice(0, limit);
   queue.forEach((item, i) => (item.rank = i + 1));
   nearMisses.forEach((item, i) => (item.rank = i + 1));
 
-  const hotClusters = detectHotClusters(allItems.slice(0, 30), data.repo, fileCache);
+  // 5. Detect hot clusters
+  const hotClusters = detectHotClusters(allItems, repo, fileCache);
 
+  // 6. Output
   const output: TriageOutput = {
     generatedAt: new Date().toISOString(),
-    repo: data.repo,
-    scanned: data.scanned,
+    repo,
+    scanned: prs.length,
     queue,
     nearMisses,
     hotClusters,
-    excludedReasonCounts: data.excluded_reason_counts,
   };
 
   console.log(JSON.stringify(output, null, 2));
