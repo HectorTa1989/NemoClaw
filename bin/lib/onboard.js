@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Interactive onboarding wizard — 7 steps from zero to running sandbox.
-// Supports non-interactive mode via --non-interactive flag or
-// NEMOCLAW_NON_INTERACTIVE=1 env var for CI/CD pipelines.
+// Interactive onboarding wizard — 8 steps from zero to running sandbox.
+// Supports agent selection (OpenClaw, Hermes) via --agent flag or
+// NEMOCLAW_AGENT env var. Non-interactive mode via --non-interactive flag
+// or NEMOCLAW_NON_INTERACTIVE=1 env var for CI/CD pipelines.
 
 const fs = require("fs");
 const os = require("os");
@@ -56,6 +57,7 @@ const {
   getMemoryInfo,
   planHostRemediation,
 } = require("./preflight");
+const { getAgentChoices, loadAgent, resolveAgentName } = require("./agent-defs");
 
 // Typed modules (compiled from src/lib/*.ts → dist/lib/*.js)
 const gatewayState = require("../../dist/lib/gateway-state");
@@ -98,6 +100,10 @@ const DIM = USE_COLOR ? "\x1b[2m" : "";
 const RESET = USE_COLOR ? "\x1b[0m" : "";
 let OPENSHELL_BIN = null;
 const GATEWAY_NAME = "nemoclaw";
+// Selected agent — set during agent_selection step, used throughout onboarding.
+let _selectedAgent = null; // loadAgent() result
+let _selectedAgentName = "openclaw"; // default
+let _selectedAgentDisplayName = "OpenClaw"; // default
 const BACK_TO_SELECTION = "__NEMOCLAW_BACK_TO_SELECTION__";
 const OPENCLAW_LAUNCH_AGENT_PLIST = "~/Library/LaunchAgents/ai.openclaw.gateway.plist";
 
@@ -1630,7 +1636,7 @@ function getNonInteractiveModel(providerKey) {
 
 // eslint-disable-next-line complexity
 async function preflight() {
-  step(1, 8, "Preflight checks");
+  step(ONBOARD_STEP_INDEX.preflight.number, ONBOARD_TOTAL_STEPS, "Preflight checks");
 
   const host = assessHost();
 
@@ -1805,7 +1811,7 @@ async function preflight() {
 // ── Step 2: Gateway ──────────────────────────────────────────────
 
 async function startGatewayWithOptions(_gpu, { exitOnFailure = true } = {}) {
-  step(2, 8, "Starting OpenShell gateway");
+  step(ONBOARD_STEP_INDEX.gateway.number, ONBOARD_TOTAL_STEPS, "Starting OpenShell gateway");
 
   const gatewayStatus = runCaptureOpenshell(["status"], { ignoreError: true });
   const gwInfo = runCaptureOpenshell(["gateway", "info", "-g", GATEWAY_NAME], {
@@ -2058,7 +2064,7 @@ async function createSandbox(
   enabledChannels = null,
   fromDockerfile = null,
 ) {
-  step(6, 8, "Creating sandbox");
+  step(ONBOARD_STEP_INDEX.sandbox.number, ONBOARD_TOTAL_STEPS, "Creating sandbox");
 
   const sandboxName = sandboxNameOverride || (await promptValidatedSandboxName());
   const chatUiUrl = process.env.CHAT_UI_URL || `http://127.0.0.1:${CONTROL_UI_PORT}`;
@@ -2193,13 +2199,32 @@ async function createSandbox(
       fs.copyFileSync(fromResolved, stagedDockerfile);
     }
     console.log(`  Using custom Dockerfile: ${fromResolved}`);
+  } else if (_selectedAgent?.dockerfilePath) {
+    // Agent-specific Dockerfile — stage with the full repo as context
+    // so COPY paths relative to repo root work.
+    buildCtx = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-build-"));
+    const agentDockerfile = _selectedAgent.dockerfilePath;
+    // Copy the files the agent Dockerfile needs
+    fs.cpSync(ROOT, buildCtx, {
+      recursive: true,
+      filter: (src) => {
+        const base = path.basename(src);
+        return !["node_modules", ".git", ".venv", "__pycache__", ".claude"].includes(base);
+      },
+    });
+    stagedDockerfile = path.join(buildCtx, "Dockerfile");
+    fs.copyFileSync(agentDockerfile, stagedDockerfile);
+    console.log(`  Using ${_selectedAgentDisplayName} Dockerfile: ${agentDockerfile}`);
   } else {
     ({ buildCtx, stagedDockerfile } = stageOptimizedSandboxBuildContext(ROOT));
   }
 
   // Create sandbox (use -- echo to avoid dropping into interactive shell)
   // Pass the base policy so sandbox starts in proxy mode (required for policy updates later)
-  const basePolicyPath = path.join(ROOT, "nemoclaw-blueprint", "policies", "openclaw-sandbox.yaml");
+  // Use agent-specific policy if available, fall back to default OpenClaw policy.
+  const agentPolicyPath = _selectedAgent?.policyAdditionsPath;
+  const basePolicyPath =
+    agentPolicyPath || path.join(ROOT, "nemoclaw-blueprint", "policies", "openclaw-sandbox.yaml");
   const createArgs = [
     "--from",
     `${buildCtx}/Dockerfile`,
@@ -2418,7 +2443,11 @@ async function createSandbox(
 
 // eslint-disable-next-line complexity
 async function setupNim(gpu) {
-  step(3, 8, "Configuring inference (NIM)");
+  step(
+    ONBOARD_STEP_INDEX.provider_selection.number,
+    ONBOARD_TOTAL_STEPS,
+    "Configuring inference (NIM)",
+  );
 
   let model = null;
   let provider = REMOTE_PROVIDER_CONFIG.build.providerName;
@@ -3022,7 +3051,7 @@ async function setupInference(
   endpointUrl = null,
   credentialEnv = null,
 ) {
-  step(4, 8, "Setting up inference provider");
+  step(ONBOARD_STEP_INDEX.inference.number, ONBOARD_TOTAL_STEPS, "Setting up inference provider");
   runOpenshell(["gateway", "select", GATEWAY_NAME], { ignoreError: true });
 
   if (
@@ -3186,7 +3215,7 @@ const MESSAGING_CHANNELS = [
 ];
 
 async function setupMessagingChannels() {
-  step(5, 8, "Messaging channels");
+  step(ONBOARD_STEP_INDEX.messaging.number, ONBOARD_TOTAL_STEPS, "Messaging channels");
 
   const getMessagingToken = (envKey) =>
     getCredential(envKey) || normalizeCredentialValue(process.env[envKey]) || null;
@@ -3341,7 +3370,11 @@ async function setupMessagingChannels() {
 // ── Step 7: OpenClaw ─────────────────────────────────────────────
 
 async function setupOpenclaw(sandboxName, model, provider) {
-  step(7, 8, "Setting up OpenClaw inside sandbox");
+  step(
+    ONBOARD_STEP_INDEX.agent_setup.number,
+    ONBOARD_TOTAL_STEPS,
+    `Setting up ${_selectedAgentDisplayName} inside sandbox`,
+  );
 
   const selectionConfig = getProviderSelectionConfig(provider, model);
   if (selectionConfig) {
@@ -3364,11 +3397,91 @@ async function setupOpenclaw(sandboxName, model, provider) {
   console.log("  ✓ OpenClaw gateway launched inside sandbox");
 }
 
+/**
+ * Agent-aware setup dispatcher.
+ * For OpenClaw: runs the existing setupOpenclaw flow.
+ * For Hermes: the gateway starts automatically via the entrypoint; we just
+ * verify it's healthy. Future agents can add their own setup logic here.
+ */
+async function setupAgent(sandboxName, model, provider) {
+  if (_selectedAgentName === "openclaw" || !_selectedAgent) {
+    return setupOpenclaw(sandboxName, model, provider);
+  }
+
+  step(
+    ONBOARD_STEP_INDEX.agent_setup.number,
+    ONBOARD_TOTAL_STEPS,
+    `Setting up ${_selectedAgentDisplayName} inside sandbox`,
+  );
+
+  // For Hermes (and future agents): the gateway process starts automatically
+  // via the container entrypoint (start.sh). Write the NemoClaw selection
+  // config into the sandbox if applicable.
+  const selectionConfig = getProviderSelectionConfig(provider, model);
+  if (selectionConfig) {
+    const sandboxConfig = {
+      ...selectionConfig,
+      agent: _selectedAgentName,
+      onboardedAt: new Date().toISOString(),
+    };
+    const script = buildSandboxConfigSyncScript(sandboxConfig);
+    const scriptFile = writeSandboxConfigSyncFile(script);
+    try {
+      run(
+        `${openshellShellCommand(["sandbox", "connect", sandboxName])} < ${shellQuote(scriptFile)}`,
+        { stdio: ["ignore", "ignore", "inherit"] },
+      );
+    } finally {
+      cleanupTempDir(scriptFile, "nemoclaw-sync");
+    }
+  }
+
+  // Verify agent health via the configured health probe
+  const probe = _selectedAgent.healthProbe;
+  if (probe?.url) {
+    console.log(`  Waiting for ${_selectedAgentDisplayName} gateway...`);
+    let healthy = false;
+    for (let i = 0; i < 15; i++) {
+      const result = runCaptureOpenshell(
+        ["sandbox", "exec", sandboxName, "curl", "-sf", probe.url],
+        { ignoreError: true },
+      );
+      if (result && result.includes("ok")) {
+        healthy = true;
+        break;
+      }
+      sleep(2);
+    }
+    if (healthy) {
+      console.log(`  ✓ ${_selectedAgentDisplayName} gateway is healthy`);
+    } else {
+      console.log(
+        `  ⚠ ${_selectedAgentDisplayName} gateway health check timed out (may still be starting)`,
+      );
+    }
+  } else {
+    console.log(`  ✓ ${_selectedAgentDisplayName} configured inside sandbox`);
+  }
+}
+
+/**
+ * Agent-aware readiness check for resume mode.
+ */
+function isAgentReady(sandboxName) {
+  if (_selectedAgentName === "openclaw" || !_selectedAgent) {
+    return isOpenclawReady(sandboxName);
+  }
+  // For non-OpenClaw agents, check if the sandbox is running
+  // (the entrypoint handles agent startup).
+  const list = runCaptureOpenshell(["sandbox", "list"], { ignoreError: true });
+  return isSandboxReady(list, sandboxName);
+}
+
 // ── Step 7: Policy presets ───────────────────────────────────────
 
 // eslint-disable-next-line complexity
 async function _setupPolicies(sandboxName) {
-  step(8, 8, "Policy presets");
+  step(ONBOARD_STEP_INDEX.policies.number, ONBOARD_TOTAL_STEPS, "Policy presets");
 
   const suggestions = ["pypi", "npm"];
 
@@ -3646,7 +3759,7 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   const onSelection = typeof options.onSelection === "function" ? options.onSelection : null;
   const webSearchConfig = options.webSearchConfig || null;
 
-  step(8, 8, "Policy presets");
+  step(ONBOARD_STEP_INDEX.policies.number, ONBOARD_TOTAL_STEPS, "Policy presets");
 
   const suggestions = ["pypi", "npm"];
   if (getCredential("TELEGRAM_BOT_TOKEN")) suggestions.push("telegram");
@@ -3901,20 +4014,23 @@ function startRecordedStep(stepName, updates = {}) {
 }
 
 const ONBOARD_STEP_INDEX = {
-  preflight: { number: 1, title: "Preflight checks" },
-  gateway: { number: 2, title: "Starting OpenShell gateway" },
-  provider_selection: { number: 3, title: "Configuring inference (NIM)" },
-  inference: { number: 4, title: "Setting up inference provider" },
-  messaging: { number: 5, title: "Messaging channels" },
-  sandbox: { number: 6, title: "Creating sandbox" },
-  openclaw: { number: 7, title: "Setting up OpenClaw inside sandbox" },
-  policies: { number: 8, title: "Policy presets" },
+  agent_selection: { number: 1, title: "Agent selection" },
+  preflight: { number: 2, title: "Preflight checks" },
+  gateway: { number: 3, title: "Starting OpenShell gateway" },
+  provider_selection: { number: 4, title: "Configuring inference (NIM)" },
+  inference: { number: 5, title: "Setting up inference provider" },
+  messaging: { number: 6, title: "Messaging channels" },
+  sandbox: { number: 7, title: "Creating sandbox" },
+  agent_setup: { number: 8, title: "Setting up agent inside sandbox" },
+  policies: { number: 9, title: "Policy presets" },
 };
+
+const ONBOARD_TOTAL_STEPS = Object.keys(ONBOARD_STEP_INDEX).length;
 
 function skippedStepMessage(stepName, detail, reason = "resume") {
   const stepInfo = ONBOARD_STEP_INDEX[stepName];
   if (stepInfo) {
-    step(stepInfo.number, 8, stepInfo.title);
+    step(stepInfo.number, ONBOARD_TOTAL_STEPS, stepInfo.title);
   }
   const prefix = reason === "reuse" ? "[reuse]" : "[resume]";
   console.log(`  ${prefix} Skipping ${stepName}${detail ? ` (${detail})` : ""}`);
@@ -4052,6 +4168,52 @@ async function onboard(opts = {}) {
     if (isNonInteractive()) note("  (non-interactive mode)");
     if (resume) note("  (resume mode)");
     console.log("  ===================");
+
+    // ── Step 1: Agent selection ─────────────────────────────────
+    const resumeAgent = resume && session?.agent;
+    if (resumeAgent) {
+      _selectedAgentName = session.agent;
+      skippedStepMessage("agent_selection", _selectedAgentName);
+    } else {
+      step(ONBOARD_STEP_INDEX.agent_selection.number, ONBOARD_TOTAL_STEPS, "Agent selection");
+      _selectedAgentName = resolveAgentName({ agentFlag: opts.agent, session });
+      if (_selectedAgentName === "openclaw" && !opts.agent && !process.env.NEMOCLAW_AGENT) {
+        // If no explicit choice, prompt interactively (unless non-interactive)
+        const choices = getAgentChoices();
+        if (choices.length > 1 && !isNonInteractive()) {
+          console.log("");
+          console.log("  Which agent would you like to run in the sandbox?");
+          console.log("");
+          choices.forEach((c, i) => {
+            const marker = i === 0 ? " (default)" : "";
+            console.log(`    ${i + 1}) ${c.displayName}${marker}`);
+            console.log(`       ${DIM}${c.description}${RESET}`);
+          });
+          console.log("");
+          const answer = await promptOrDefault(
+            `  Select agent [1-${choices.length}]: `,
+            "NEMOCLAW_AGENT",
+            "1",
+          );
+          const idx = parseInt(answer, 10);
+          if (idx >= 1 && idx <= choices.length) {
+            _selectedAgentName = choices[idx - 1].name;
+          } else if (choices.find((c) => c.name === answer)) {
+            _selectedAgentName = answer;
+          }
+        } else if (isNonInteractive()) {
+          note(`  [non-interactive] Agent: ${_selectedAgentName}`);
+        }
+      }
+      onboardSession.updateSession((current) => {
+        current.agent = _selectedAgentName;
+        return current;
+      });
+      onboardSession.markStepComplete("agent_selection");
+    }
+    _selectedAgent = loadAgent(_selectedAgentName);
+    _selectedAgentDisplayName = _selectedAgent.displayName;
+    console.log(`  Agent: ${_selectedAgentDisplayName}`);
 
     let gpu;
     const resumePreflight = resume && session?.steps?.preflight?.status === "complete";
@@ -4235,14 +4397,14 @@ async function onboard(opts = {}) {
       onboardSession.markStepComplete("sandbox", { sandboxName, provider, model, nimContainer });
     }
 
-    const resumeOpenclaw = resume && sandboxName && isOpenclawReady(sandboxName);
-    if (resumeOpenclaw) {
-      skippedStepMessage("openclaw", sandboxName);
-      onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
+    const resumeAgentSetup = resume && sandboxName && isAgentReady(sandboxName);
+    if (resumeAgentSetup) {
+      skippedStepMessage("agent_setup", sandboxName);
+      onboardSession.markStepComplete("agent_setup", { sandboxName, provider, model });
     } else {
-      startRecordedStep("openclaw", { sandboxName, provider, model });
-      await setupOpenclaw(sandboxName, model, provider);
-      onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
+      startRecordedStep("agent_setup", { sandboxName, provider, model });
+      await setupAgent(sandboxName, model, provider);
+      onboardSession.markStepComplete("agent_setup", { sandboxName, provider, model });
     }
 
     const recordedPolicyPresets = Array.isArray(session?.policyPresets)
@@ -4342,6 +4504,8 @@ module.exports = {
   setupNim,
   isInferenceRouteReady,
   isOpenclawReady,
+  isAgentReady,
+  setupAgent,
   arePolicyPresetsApplied,
   presetsCheckboxSelector,
   setupPoliciesWithSelection,

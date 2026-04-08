@@ -1360,8 +1360,8 @@ const { setupInference } = require(${onboardPath});
 
     assert.match(source, /const ONBOARD_STEP_INDEX = \{/);
     assert.match(source, /function skippedStepMessage\(stepName, detail, reason = "resume"\)/);
-    assert.match(source, /step\(stepInfo\.number, 8, stepInfo\.title\);/);
-    assert.match(source, /skippedStepMessage\("openclaw", sandboxName\)/);
+    assert.match(source, /step\(stepInfo\.number, ONBOARD_TOTAL_STEPS, stepInfo\.title\);/);
+    assert.match(source, /skippedStepMessage\("agent_setup", sandboxName\)/);
     assert.match(
       source,
       /skippedStepMessage\("policies", \(recordedPolicyPresets \|\| \[\]\)\.join\(", "\)\)/,

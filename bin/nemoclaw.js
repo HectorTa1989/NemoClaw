@@ -765,11 +765,23 @@ async function onboard(args) {
     if (!fromDockerfile || fromDockerfile.startsWith("--")) {
       console.error("  --from requires a path to a Dockerfile");
       console.error(
-        `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [${NOTICE_ACCEPT_FLAG}]`,
+        `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [${NOTICE_ACCEPT_FLAG}]`,
       );
       process.exit(1);
     }
     args = [...args.slice(0, fromIdx), ...args.slice(fromIdx + 2)];
+  }
+
+  // Extract --agent <name> (e.g. --agent hermes)
+  let agentFlag = null;
+  const agentIdx = args.indexOf("--agent");
+  if (agentIdx !== -1) {
+    agentFlag = args[agentIdx + 1];
+    if (!agentFlag || agentFlag.startsWith("--")) {
+      console.error("  --agent requires a name (e.g. openclaw, hermes)");
+      process.exit(1);
+    }
+    args = [...args.slice(0, agentIdx), ...args.slice(agentIdx + 2)];
   }
 
   const allowedArgs = new Set([
@@ -782,7 +794,7 @@ async function onboard(args) {
   if (unknownArgs.length > 0) {
     console.error(`  Unknown onboard option(s): ${unknownArgs.join(", ")}`);
     console.error(
-      `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [${NOTICE_ACCEPT_FLAG}]`,
+      `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [${NOTICE_ACCEPT_FLAG}]`,
     );
     process.exit(1);
   }
@@ -797,6 +809,7 @@ async function onboard(args) {
     recreateSandbox,
     fromDockerfile,
     acceptThirdPartySoftware,
+    agent: agentFlag,
   });
 }
 
@@ -1168,6 +1181,7 @@ function help() {
 
   ${G}Getting Started:${R}
     ${B}nemoclaw onboard${R}                 Configure inference endpoint and credentials
+    nemoclaw onboard ${D}--agent hermes${R}    Select agent (openclaw, hermes)
     nemoclaw onboard ${D}--from <Dockerfile>${R}  Use a custom Dockerfile for the sandbox image
                                     ${D}(non-interactive: ${NOTICE_ACCEPT_FLAG} or ${NOTICE_ACCEPT_ENV}=1)${R}
 
