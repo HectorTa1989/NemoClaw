@@ -491,6 +491,14 @@ If you see a Docker connection error, start the Docker daemon:</p>
 <li><p>Install and start a supported container runtime (Docker Desktop or Colima). Without a running runtime, the installer cannot connect to Docker.</p></li>
 </ol>
 </section>
+<section id="permission-errors-during-installation">
+<h3>Permission errors during installation<a class="headerlink" href="#permission-errors-during-installation" title="Link to this heading">#</a></h3>
+<p>The NemoClaw installer does not require <code class="docutils literal notranslate"><span class="pre">sudo</span></code> or root.
+It installs Node.js via nvm and NemoClaw via npm, both into user-local directories.
+The installer also handles OpenShell installation automatically using a pinned release.</p>
+<p>If you see permission errors during installation, they typically come from Docker, not the NemoClaw installer itself.
+Docker must be installed and running before you run the installer, and installing Docker may require elevated privileges on Linux.</p>
+</section>
 <section id="npm-install-fails-with-permission-errors">
 <h3>npm install fails with permission errors<a class="headerlink" href="#npm-install-fails-with-permission-errors" title="Link to this heading">#</a></h3>
 <p>If <code class="docutils literal notranslate"><span class="pre">npm</span> <span class="pre">install</span></code> fails with an <code class="docutils literal notranslate"><span class="pre">EACCES</span></code> permission error, do not run npm with <code class="docutils literal notranslate"><span class="pre">sudo</span></code>.
@@ -763,6 +771,7 @@ Allocate at least 8 GB RAM and 4 CPUs:</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#image-push-fails-with-out-of-memory-errors">Image push fails with out-of-memory errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docker-is-not-running">Docker is not running</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#macos-first-run-failures">macOS first-run failures</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#permission-errors-during-installation">Permission errors during installation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#npm-install-fails-with-permission-errors">npm install fails with permission errors</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#port-already-in-use">Port already in use</a></li>
 </ul>
