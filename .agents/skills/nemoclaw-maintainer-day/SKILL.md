@@ -16,27 +16,16 @@ Execute one pass of the maintainer loop, prioritizing version-targeted work.
 - Risky code areas: [RISKY-AREAS.md](RISKY-AREAS.md)
 - State schema: [STATE-SCHEMA.md](STATE-SCHEMA.md)
 
-## Step 1: Determine Target Version
+## Step 1: Check Version Progress
 
 ```bash
-git fetch origin --tags --prune
-git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-target.ts
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-progress.ts <version>
 ```
 
-The target is one patch above the latest tag.
+The first script determines the target version. The second shows shipped vs open.
 
-## Step 2: Check Version Progress
-
-```bash
-gh pr list --repo NVIDIA/NemoClaw --label "<version>" --state open --json number,title,url,statusCheckRollup,mergeStateStatus
-gh pr list --repo NVIDIA/NemoClaw --label "<version>" --state merged --json number,title,url
-gh issue list --repo NVIDIA/NemoClaw --label "<version>" --state open --json number,title,url
-gh issue list --repo NVIDIA/NemoClaw --label "<version>" --state closed --json number,title,url
-```
-
-Show a brief progress line: `v0.0.8: 3/5 shipped (2 PRs open)`.
-
-## Step 3: Pick One Action
+## Step 2: Pick One Action
 
 From the open version-targeted items, pick the highest-value one:
 
@@ -51,21 +40,27 @@ If all version-targeted items are blocked, fall back to the general backlog. Pro
 
 Prefer finishing one almost-ready contribution over starting a new refactor.
 
-## Step 4: Execute
+## Step 3: Execute
 
 Follow the chosen workflow document. A good pass ends with one of:
 
 - a PR approved, a fix pushed, a test gap closed, a hotspot mitigated, or a blocker surfaced.
 
-## Step 5: Report Progress
+## Step 4: Report Progress
 
-After the action, show updated progress: `v0.0.8: 4/5 shipped (1 PR open)`.
+Re-run the progress script and show the update:
+
+```bash
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-progress.ts <version>
+```
 
 If all version-targeted items are done, suggest running `/nemoclaw-maintainer-evening` early.
 
-## Step 6: Update State
+Update `.nemoclaw-maintainer/state.json` via the state script:
 
-Update `.nemoclaw-maintainer/state.json`: `updatedAt`, queue summary, `activeWork`, and a short history entry. If state file doesn't exist, create it from [STATE-SCHEMA.md](STATE-SCHEMA.md). Ensure `.nemoclaw-maintainer` is in `.git/info/exclude`.
+```bash
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/state.ts history <action> <item> "<note>"
+```
 
 ## Commit Hygiene
 

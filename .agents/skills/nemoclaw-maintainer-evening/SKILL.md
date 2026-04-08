@@ -10,66 +10,36 @@ Wrap up the day: check progress, bump stragglers, summarize for QA, cut the tag.
 
 See [PR-REVIEW-PRIORITIES.md](../nemoclaw-maintainer-day/PR-REVIEW-PRIORITIES.md) for the daily cadence.
 
-## Step 1: Determine Target Version
+## Step 1: Check Progress
 
 ```bash
-git fetch origin --tags
-git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-target.ts
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-progress.ts <version>
 ```
 
-The target version is one patch above the latest tag. Confirm by checking which version label is on open items:
+The first script determines the target version. The second shows shipped vs open. Present the progress summary to the user.
+
+## Step 2: Bump Stragglers
 
 ```bash
-gh issue list --repo NVIDIA/NemoClaw --label "v*" --state open --json number,title,labels --limit 100
-gh pr list --repo NVIDIA/NemoClaw --label "v*" --state open --json number,title,labels --limit 100
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/bump-stragglers.ts <version> <next-version>
 ```
 
-## Step 2: Check Progress
+This creates the next version label if needed, then moves all open items from the current version to the next. Tell the user what got bumped.
 
-Gather all items labeled with the target version:
+## Step 3: Generate Handoff Summary
 
 ```bash
-gh pr list --repo NVIDIA/NemoClaw --label "<version>" --state merged --json number,title,url
-gh pr list --repo NVIDIA/NemoClaw --label "<version>" --state open --json number,title,url
-gh issue list --repo NVIDIA/NemoClaw --label "<version>" --state closed --json number,title,url
-gh issue list --repo NVIDIA/NemoClaw --label "<version>" --state open --json number,title,url
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/handoff-summary.ts
 ```
 
-Present a progress summary:
+This lists commits since the last tag, identifies risky areas touched, and suggests QA test focus areas. Format the output as a concise summary the user can paste into the tag annotation or a handoff channel.
 
-| Status | Count | Items |
-|--------|-------|-------|
-| Shipped | 4 | #1234, #1235, #1236, #1237 |
-| Still open | 1 | #1238 |
-
-## Step 3: Bump Stragglers
-
-For each item still open, move it to the next patch version:
-
-```bash
-# Compute next version (target patch + 1)
-gh label create "<next-version>" --repo NVIDIA/NemoClaw --description "Release target" --color "1d76db" 2>/dev/null || true
-gh issue edit <number> --repo NVIDIA/NemoClaw --remove-label "<version>" --add-label "<next-version>"
-gh pr edit <number> --repo NVIDIA/NemoClaw --remove-label "<version>" --add-label "<next-version>"
-```
-
-Tell the user what got bumped and why (still open at EOD).
-
-## Step 4: Generate Handoff Summary
-
-Build a summary for the QA team:
-
-1. **Commits since last tag**: `git log --oneline <previous-tag>..origin/main`
-2. **Risky areas touched**: cross-reference changed files with [RISKY-AREAS.md](../nemoclaw-maintainer-day/RISKY-AREAS.md)
-3. **Suggested test focus**: based on risky areas and the nature of changes
-
-Format as a concise summary the user can paste into the tag annotation or a handoff channel.
-
-## Step 5: Cut the Tag
+## Step 4: Cut the Tag
 
 Load `cut-release-tag`. The version is already known — default to patch bump, but still show the commit and changelog for confirmation.
 
-## Step 6: Confirm and Share
+## Step 5: Confirm and Share
 
 After the tag is cut, present the final summary:
 
@@ -80,9 +50,11 @@ After the tag is cut, present the final summary:
 
 This summary can be shared in the team's handoff channel.
 
-## Step 7: Update State
+## Step 6: Update State
 
-Record in `.nemoclaw-maintainer/state.json`: tag cut, items shipped, items bumped, handoff summary.
+```bash
+node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/state.ts history "tag-cut" "<version>" "shipped N items, bumped M"
+```
 
 ## Notes
 

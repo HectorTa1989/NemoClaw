@@ -2,9 +2,9 @@
 
 Review a security-sensitive item before it enters the normal fast path.
 
-## Step 1: Discover Security Items
+## Step 1: Identify the Security Item
 
-Use `find-review-pr` to surface PRs with `security` + `priority: high` labels and detect duplicates. Also check the triage queue for PRs touching risky areas (see [RISKY-AREAS.md](RISKY-AREAS.md)).
+The morning triage and `find-review-pr` already surface security-labeled PRs. Start from the item selected in the day loop's action step. If running standalone, check the triage queue for PRs touching risky areas (see [RISKY-AREAS.md](RISKY-AREAS.md)).
 
 ## Step 2: Gather Context
 
