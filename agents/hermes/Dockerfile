@@ -71,18 +71,19 @@ RUN mkdir -p /sandbox/.hermes-data/plugins/nemoclaw \
 # OpenShell's L7 proxy rejects (hostname-based policy). Without it,
 # python-telegram-bot uses default httpx transport which respects
 # HTTPS_PROXY and routes through the proxy correctly.
+# Replace _fallback_ips method to always return empty list, which
+# skips the entire fallback transport code path.
 RUN python3 -c "\
 import pathlib, re; \
 p = pathlib.Path('/usr/local/lib/python3.11/dist-packages/gateway/platforms/telegram.py'); \
 src = p.read_text(); \
-patched = re.sub( \
-    r'(fallback_ips = self\._fallback_ips\(\))', \
-    r'fallback_ips = []  # NemoClaw: disabled in sandbox (proxy-only networking)', \
-    src); \
-patched = re.sub( \
-    r'if not fallback_ips:\s*\n\s*fallback_ips = await discover_fallback_ips\(\)', \
-    'pass  # NemoClaw: skip fallback IP discovery in sandbox', \
-    patched); \
+patched = src.replace( \
+    'fallback_ips = self._fallback_ips()', \
+    'fallback_ips = []  # NemoClaw: disabled for sandbox proxy compatibility'); \
+patched = patched.replace( \
+    'if not fallback_ips:', \
+    'if False:  # NemoClaw: skip fallback discovery'); \
+assert 'NemoClaw: disabled' in patched, 'Patch failed: _fallback_ips line not found'; \
 p.write_text(patched); \
 print('[patch] Disabled TelegramFallbackTransport for sandbox proxy compatibility')"
 
