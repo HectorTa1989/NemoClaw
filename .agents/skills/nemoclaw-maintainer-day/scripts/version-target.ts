@@ -4,8 +4,9 @@
 /**
  * Compute the day's target version and find stragglers from older versions.
  *
- * Reads the latest semver tag, bumps patch by 1, then queries GitHub for
- * open PRs/issues carrying any older version label. Output is JSON.
+ * Reads the latest semver tag from the local repo, bumps patch by 1, then
+ * queries GitHub for open PRs/issues carrying version labels older than
+ * the target. Output is JSON.
  *
  * Usage: node --experimental-strip-types --no-warnings .agents/skills/nemoclaw-maintainer-day/scripts/version-target.ts [--repo OWNER/REPO]
  */
@@ -46,6 +47,19 @@ function bumpPatch(tag: string): string {
   return `v${match[1]}.${match[2]}.${parseInt(match[3], 10) + 1}`;
 }
 
+/**
+ * Compare two semver strings. Returns negative if a < b, 0 if equal, positive if a > b.
+ */
+function compareSemver(a: string, b: string): number {
+  const pa = a.replace(/^v/, "").split(".").map(Number);
+  const pb = b.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 function findStragglers(repo: string, targetVersion: string): Straggler[] {
   const stragglers: Straggler[] = [];
 
@@ -62,7 +76,9 @@ function findStragglers(repo: string, targetVersion: string): Straggler[] {
       }>;
       for (const pr of prs) {
         for (const label of pr.labels) {
-          if (/^v\d+\.\d+\.\d+$/.test(label.name) && label.name !== targetVersion) {
+          // Only flag labels older than the target — not the target itself
+          // and not future versions (e.g. v0.0.11 is not a straggler)
+          if (/^v\d+\.\d+\.\d+$/.test(label.name) && compareSemver(label.name, targetVersion) < 0) {
             stragglers.push({
               number: pr.number,
               title: pr.title,
@@ -73,7 +89,9 @@ function findStragglers(repo: string, targetVersion: string): Straggler[] {
           }
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err: unknown) {
+      process.stderr.write(`[version-target] Failed to parse PR list: ${err instanceof Error ? err.message : err}\n`);
+    }
   }
 
   // Get all open issues with version labels
@@ -89,7 +107,7 @@ function findStragglers(repo: string, targetVersion: string): Straggler[] {
       }>;
       for (const issue of issues) {
         for (const label of issue.labels) {
-          if (/^v\d+\.\d+\.\d+$/.test(label.name) && label.name !== targetVersion) {
+          if (/^v\d+\.\d+\.\d+$/.test(label.name) && compareSemver(label.name, targetVersion) < 0) {
             stragglers.push({
               number: issue.number,
               title: issue.title,
@@ -100,7 +118,9 @@ function findStragglers(repo: string, targetVersion: string): Straggler[] {
           }
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err: unknown) {
+      process.stderr.write(`[version-target] Failed to parse issue list: ${err instanceof Error ? err.message : err}\n`);
+    }
   }
 
   return stragglers;
@@ -108,6 +128,7 @@ function findStragglers(repo: string, targetVersion: string): Straggler[] {
 
 function main(): void {
   const args = process.argv.slice(2);
+  // --repo controls gh queries; git tags always come from the local checkout
   const repo = parseStringArg(args, "--repo", "NVIDIA/NemoClaw");
 
   run("git", ["fetch", "origin", "--tags", "--prune"]);
