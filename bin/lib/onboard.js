@@ -3992,14 +3992,10 @@ function printDashboardUiSection(sandboxName, token) {
       console.log(
         `  Token:       nemoclaw ${sandboxName} connect  →  jq -r '.gateway.auth.token' ${configPaths.immutableDir || "/sandbox/.openclaw"}/${configPaths.configFile || "openclaw.json"}`,
       );
-    } else {
       console.log(
-        `  API Key:     nemoclaw ${sandboxName} connect  →  cat ${(_selectedAgent?.configPaths || {}).immutableDir || "/sandbox/.hermes"}/.env | grep API_SERVER_KEY`,
+        "               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.",
       );
     }
-    console.log(
-      "               append  #token=<token>  to the URL, or see /tmp/gateway.log inside the sandbox.",
-    );
   }
 }
 
