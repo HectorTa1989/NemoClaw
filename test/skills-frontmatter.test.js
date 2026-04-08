@@ -11,12 +11,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const skillsRoot = path.join(repoRoot, ".agents", "skills");
-const frontmatterRe = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const frontmatterRe =
+  /^<!-- SPDX-FileCopyrightText: Copyright \(c\) 2026 NVIDIA CORPORATION & AFFILIATES\. All rights reserved\. -->\r?\n<!-- SPDX-License-Identifier: Apache-2\.0 -->\r?\n---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 function listSkillFiles(root) {
   return fs
     .readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("nemoclaw-user-"))
     .map((entry) => path.join(root, entry.name, "SKILL.md"))
     .filter((file) => fs.existsSync(file))
     .sort();
@@ -25,7 +26,7 @@ function listSkillFiles(root) {
 describe("repo skill frontmatter", () => {
   const skillFiles = listSkillFiles(skillsRoot);
 
-  it("finds repo skills to validate", () => {
+  it("finds generated repo skills to validate", () => {
     expect(skillFiles.length).toBeGreaterThan(0);
   });
 
@@ -36,7 +37,10 @@ describe("repo skill frontmatter", () => {
       const raw = fs.readFileSync(skillFile, "utf8");
       const match = raw.match(frontmatterRe);
 
-      expect(match, `${relPath} is missing YAML frontmatter`).not.toBeNull();
+      expect(
+        match,
+        `${relPath} must place the SPDX header before YAML frontmatter`,
+      ).not.toBeNull();
 
       const frontmatterText = match[1];
       const doc = YAML.parseDocument(frontmatterText, { prettyErrors: true });
