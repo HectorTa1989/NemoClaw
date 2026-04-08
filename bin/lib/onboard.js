@@ -3977,14 +3977,14 @@ function printDashboardUiSection(sandboxName, token) {
   if (token) {
     console.log(`  ${_selectedAgentDisplayName} UI (tokenized URL; treat it like a password)`);
     console.log(`  Port ${uiPort} must be forwarded before opening this URL.`);
-    for (const url of buildControlUiUrls(token)) {
+    for (const url of buildControlUiUrls(token, uiPort)) {
       console.log(`  ${url}`);
     }
   } else {
     note("  Could not read gateway token from the sandbox (download failed).");
     console.log(`  ${_selectedAgentDisplayName} UI`);
     console.log(`  Port ${uiPort} must be forwarded before opening this URL.`);
-    for (const url of buildControlUiUrls()) {
+    for (const url of buildControlUiUrls(null, uiPort)) {
       console.log(`  ${url}`);
     }
     if (_selectedAgentName === "openclaw") {
