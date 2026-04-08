@@ -1,6 +1,6 @@
 ---
 title:
-  page: "NemoClaw Quickstart — Install, Launch, and Run Your First Agent"
+  page: "NemoClaw Quickstart: Install, Launch, and Run Your First Agent"
   nav: "Quickstart"
 description:
   main: "Install NemoClaw, launch a sandbox, and run your first agent prompt."
@@ -55,6 +55,11 @@ The sandbox image is approximately 2.4 GB compressed. During image push, the Doc
 | Container runtime | Supported runtime installed and running |
 | [OpenShell](https://github.com/NVIDIA/OpenShell) | Installed |
 
+:::{warning} OpenShell lifecycle
+For NemoClaw-managed environments, use `nemoclaw onboard` when you need to create or recreate the OpenShell gateway or sandbox.
+Avoid `openshell self-update`, `npm update -g openshell`, `openshell gateway start --recreate`, or `openshell sandbox create` directly unless you intend to manage OpenShell separately and then rerun `nemoclaw onboard`.
+:::
+
 ### Container Runtimes
 
 | Platform | Supported runtimes | Notes |
@@ -80,6 +85,12 @@ curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 
 If you use nvm or fnm to manage Node.js, the installer may not update your current shell's PATH.
 If `nemoclaw` is not found after install, run `source ~/.bashrc` (or `source ~/.zshrc` for zsh) or open a new terminal.
+
+:::{note}
+The onboard flow builds the sandbox image with `NEMOCLAW_DISABLE_DEVICE_AUTH=1` so the dashboard is immediately usable during setup.
+This is a build-time setting baked into the sandbox image, not a runtime knob.
+If you export `NEMOCLAW_DISABLE_DEVICE_AUTH` after onboarding finishes, it has no effect on an existing sandbox.
+:::
 
 When the install completes, a summary confirms the running environment:
 
