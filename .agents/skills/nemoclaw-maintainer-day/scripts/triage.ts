@@ -19,6 +19,7 @@ import {
   isRiskyFile,
   run,
   SCORE_MERGE_NOW,
+  SCORE_REVIEW_READY,
   SCORE_NEAR_MISS,
   SCORE_SECURITY_ACTIONABLE,
   SCORE_STALE_AGE,
@@ -64,6 +65,7 @@ interface ClassifiedPr {
   coderabbitMajor: boolean;
   reasons: string[];
   mergeNow: boolean;
+  reviewReady: boolean;
   nearMiss: boolean;
   updatedAt: string;
   createdAt: string;
@@ -78,7 +80,7 @@ interface QueueItem {
   title: string;
   author: string;
   score: number;
-  bucket: "ready-now" | "salvage-now" | "blocked";
+  bucket: "merge-now" | "review-ready" | "salvage-now" | "blocked";
   reasons: string[];
   riskyFiles: string[];
   churn: number;
@@ -128,17 +130,16 @@ function ghApi(path: string): unknown {
 // ---------------------------------------------------------------------------
 
 function fetchOpenPrs(repo: string, approvedOnly: boolean): PrData[] {
-  // Fetch basic PR data first (lightweight — no statusCheckRollup)
-  const basicFields = [
+  const fields = [
     "number", "title", "url", "author", "additions", "deletions",
     "changedFiles", "isDraft", "createdAt", "updatedAt",
-    "mergeStateStatus", "reviewDecision", "labels",
+    "mergeStateStatus", "reviewDecision", "labels", "statusCheckRollup",
   ].join(",");
 
   const out = run("gh", [
     "pr", "list", "--repo", repo,
     "--state", "open", "--limit", "50",
-    "--json", basicFields,
+    "--json", fields,
   ]);
   if (!out) return [];
 
@@ -147,30 +148,10 @@ function fetchOpenPrs(repo: string, approvedOnly: boolean): PrData[] {
     if (approvedOnly) {
       prs = prs.filter((pr) => pr.reviewDecision === "APPROVED");
     }
-    // statusCheckRollup is fetched lazily per-PR in enrichWithChecks()
-    for (const pr of prs) {
-      pr.statusCheckRollup = [];
-    }
     return prs;
   } catch {
     return [];
   }
-}
-
-/**
- * Fetch statusCheckRollup for a single PR. This is the expensive field
- * that causes GraphQL timeouts when requested for many PRs at once.
- */
-function enrichWithChecks(repo: string, pr: PrData): void {
-  const out = run("gh", [
-    "pr", "view", String(pr.number), "--repo", repo,
-    "--json", "statusCheckRollup",
-  ]);
-  if (!out) return;
-  try {
-    const data = JSON.parse(out) as { statusCheckRollup: PrData["statusCheckRollup"] };
-    pr.statusCheckRollup = data.statusCheckRollup ?? [];
-  } catch { /* leave empty */ }
 }
 
 function classifyPr(pr: PrData): ClassifiedPr {
@@ -179,25 +160,39 @@ function classifyPr(pr: PrData): ClassifiedPr {
   if (draft) reasons.push("draft");
 
   // Check CI status
+  // gh returns two shapes: CheckRun {name, status, conclusion} and
+  // StatusContext {context, state}. Handle both.
   const checks = pr.statusCheckRollup ?? [];
-  const passing = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+  const passingConclusions = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
   let checksGreen = checks.length > 0;
   for (const check of checks) {
-    const conclusion = (check.conclusion ?? "").toUpperCase();
-    const status = (check.status ?? "").toUpperCase();
-    const done = status === "COMPLETED" || (!status && conclusion);
-    if (!done || !passing.has(conclusion)) {
-      checksGreen = false;
-      break;
+    const asAny = check as Record<string, string>;
+    // StatusContext uses "state", CheckRun uses "conclusion"+"status"
+    if (asAny.state) {
+      // StatusContext: state is SUCCESS/FAILURE/PENDING/ERROR
+      if (!passingConclusions.has(asAny.state.toUpperCase())) {
+        checksGreen = false;
+        break;
+      }
+    } else {
+      // CheckRun: check conclusion after completion
+      const conclusion = (asAny.conclusion ?? "").toUpperCase();
+      const status = (asAny.status ?? "").toUpperCase();
+      const done = status === "COMPLETED" || (!status && conclusion);
+      if (!done || !passingConclusions.has(conclusion)) {
+        checksGreen = false;
+        break;
+      }
     }
   }
   if (checks.length === 0) checksGreen = false;
   if (!checksGreen && !draft) reasons.push("failing-checks");
 
   // Check merge state
-  const mergeClean = ["CLEAN", "HAS_HOOKS", "UNSTABLE"];
+  // DIRTY = actual merge conflict. BLOCKED = branch protection (e.g. missing reviews).
+  // CLEAN/HAS_HOOKS/UNSTABLE = mergeable. UNKNOWN = not yet computed.
   const mergeState = (pr.mergeStateStatus ?? "UNKNOWN").toUpperCase();
-  const hasConflict = !mergeClean.includes(mergeState) && mergeState !== "UNKNOWN";
+  const hasConflict = mergeState === "DIRTY";
   if (hasConflict) reasons.push("merge-conflict");
 
   // Check review decision
@@ -209,12 +204,13 @@ function classifyPr(pr: PrData): ClassifiedPr {
   // (Full CodeRabbit check is in check-gates.ts via GraphQL)
   const coderabbitMajor = false; // conservative — gate checker does the real check
 
-  // Classify
+  // Classify into buckets
+  // merge-now: approved + green CI + no conflicts — ready for final gate
   const mergeNow = !draft && checksGreen && !hasConflict && approved && !coderabbitMajor;
-  // Near miss: not draft, most things pass but one blocker that looks fixable
-  const nearMiss = !draft && !mergeNow && reasons.length <= 2 &&
-    !reasons.includes("draft") &&
-    (checksGreen || reasons.includes("failing-checks")) &&
+  // review-ready: green CI + no conflicts + not draft — best candidates for review
+  const reviewReady = !draft && !mergeNow && checksGreen && !hasConflict;
+  // near-miss: not draft, has fixable blockers (failing CI or minor conflict)
+  const nearMiss = !draft && !mergeNow && !reviewReady && reasons.length <= 2 &&
     !hasConflict;
 
   return {
@@ -228,6 +224,7 @@ function classifyPr(pr: PrData): ClassifiedPr {
     coderabbitMajor,
     reasons,
     mergeNow,
+    reviewReady,
     nearMiss,
     updatedAt: pr.updatedAt,
     createdAt: pr.createdAt,
@@ -264,13 +261,17 @@ function scoreItem(
   riskyFiles: string[],
 ): { score: number; bucket: "ready-now" | "salvage-now" | "blocked"; nextAction: string } {
   let score = 0;
-  let bucket: "ready-now" | "salvage-now" | "blocked" = "blocked";
+  let bucket: "merge-now" | "review-ready" | "salvage-now" | "blocked" = "blocked";
   let nextAction = "review";
 
   if (item.mergeNow) {
     score += SCORE_MERGE_NOW;
-    bucket = "ready-now";
+    bucket = "merge-now";
     nextAction = "merge-gate";
+  } else if (item.reviewReady) {
+    score += SCORE_REVIEW_READY;
+    bucket = "review-ready";
+    nextAction = "review → merge-gate";
   } else if (item.nearMiss) {
     score += SCORE_NEAR_MISS;
     bucket = "salvage-now";
@@ -360,15 +361,13 @@ function main(): void {
     process.exit(1);
   }
 
-  // Pre-filter to non-draft, non-conflict candidates worth enriching
-  const candidates = prs.filter((pr) => !pr.isDraft);
-  const enrichCount = Math.min(candidates.length, limit * 3);
-  process.stderr.write(`Enriching top ${enrichCount} candidates with CI status...\n`);
-  for (const pr of candidates.slice(0, enrichCount)) {
-    enrichWithChecks(repo, pr);
-  }
-
   const classified = prs.map(classifyPr);
+  process.stderr.write(
+    `Classified: ${classified.filter((c) => c.mergeNow).length} merge-now, ` +
+    `${classified.filter((c) => c.reviewReady).length} review-ready, ` +
+    `${classified.filter((c) => c.nearMiss).length} near-miss, ` +
+    `${classified.filter((c) => !c.mergeNow && !c.reviewReady && !c.nearMiss).length} blocked\n`,
+  );
 
   // 2. Load exclusions
   const state = loadState();
@@ -381,12 +380,12 @@ function main(): void {
   // 3. Enrich top candidates with file data and scoring
   const fileCache = new Map<number, string[]>();
   const topCandidates = allItems
-    .filter((item) => item.mergeNow || item.nearMiss)
+    .filter((item) => item.mergeNow || item.reviewReady || item.nearMiss)
     .slice(0, limit * 2);
 
-  // Also include non-merge/near-miss items so we have a full picture
+  // Also include non-actionable non-draft items for context
   const remaining = allItems
-    .filter((item) => !item.mergeNow && !item.nearMiss && !item.draft)
+    .filter((item) => !item.mergeNow && !item.reviewReady && !item.nearMiss && !item.draft)
     .slice(0, limit);
 
   const toScore = [...topCandidates, ...remaining];
@@ -420,7 +419,7 @@ function main(): void {
 
   // 4. Sort and rank
   scored.sort((a, b) => b.score - a.score);
-  const queue = scored.filter((s) => s.bucket === "ready-now").slice(0, limit);
+  const queue = scored.filter((s) => s.bucket === "merge-now" || s.bucket === "review-ready").slice(0, limit);
   const nearMisses = scored.filter((s) => s.bucket === "salvage-now").slice(0, limit);
   queue.forEach((item, i) => (item.rank = i + 1));
   nearMisses.forEach((item, i) => (item.rank = i + 1));

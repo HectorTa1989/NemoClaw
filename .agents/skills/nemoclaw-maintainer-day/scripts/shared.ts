@@ -93,8 +93,10 @@ export function ghJson(args: string[]): unknown {
 // Documented in nemoclaw-maintainer-day/PR-REVIEW-PRIORITIES.md.
 // ---------------------------------------------------------------------------
 
-/** PR passed all checks and only needs maintainer review */
+/** PR passed all checks and is already approved — only needs final gate */
 export const SCORE_MERGE_NOW = 40;
+/** PR has green CI, no conflicts, not draft — ready for maintainer review */
+export const SCORE_REVIEW_READY = 35;
 /** PR is close to ready with a clear small fix path */
 export const SCORE_NEAR_MISS = 30;
 /** PR touches security-sensitive code and is actionable */
