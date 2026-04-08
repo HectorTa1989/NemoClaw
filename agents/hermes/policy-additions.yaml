@@ -96,7 +96,7 @@ network_policies:
     binaries:
       - { path: /usr/local/bin/claude }
       - { path: /usr/local/bin/hermes }
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
 
   github:
     name: github
@@ -141,7 +141,7 @@ network_policies:
           - allow: { method: POST, path: "/**" }
     binaries:
       - { path: /usr/local/bin/hermes }
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
 
   # ── PyPI — needed for pip install (skill/plugin deps) ─────────
   pypi:
@@ -163,7 +163,7 @@ network_policies:
           - allow: { method: GET, path: "/**" }
     binaries:
       - { path: /usr/local/bin/pip3 }
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
 
   # ── Messaging — pre-allowed for agent notifications ───────────
   telegram:
@@ -180,7 +180,7 @@ network_policies:
           - allow: { method: GET, path: "/file/bot*/**" }
     binaries:
       - { path: /usr/local/bin/node }
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
 
   discord:
     name: discord
@@ -205,4 +205,4 @@ network_policies:
           - allow: { method: GET, path: "/**" }
     binaries:
       - { path: /usr/local/bin/node }
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
