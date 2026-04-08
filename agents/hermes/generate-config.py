@@ -12,7 +12,6 @@ Called at Docker image build time. Reads NEMOCLAW_* env vars and writes:
 import base64
 import json
 import os
-import secrets
 
 import yaml
 
@@ -20,8 +19,6 @@ import yaml
 def main():
     model = os.environ["NEMOCLAW_MODEL"]
     base_url = os.environ["NEMOCLAW_INFERENCE_BASE_URL"]
-    api_key = os.environ.get("NEMOCLAW_API_SERVER_KEY", "")
-
     msg_channels = json.loads(
         base64.b64decode(
             os.environ.get("NEMOCLAW_MESSAGING_CHANNELS_B64", "W10=") or "W10="
@@ -85,7 +82,8 @@ def main():
         config["platforms"] = platforms_config
 
     # API server config
-    api_server_key = api_key or secrets.token_hex(32)
+    # No API key — the sandbox is already network-isolated by OpenShell.
+    # Adding auth here just creates friction for testing and port-forwarded access.
     # Hermes binds to 127.0.0.1 regardless of host config (upstream bug).
     # Use an internal port (18642); the startup script's socat forwarder
     # exposes 0.0.0.0:8642 -> 127.0.0.1:18642 for OpenShell port forwarding.
@@ -94,7 +92,6 @@ def main():
         "extra": {
             "port": 18642,
             "host": "127.0.0.1",
-            "key": api_server_key,
         },
     }
 
@@ -106,7 +103,6 @@ def main():
 
     # Write .env
     env_lines = [
-        f"API_SERVER_KEY={api_server_key}",
         "API_SERVER_PORT=18642",
         "API_SERVER_HOST=127.0.0.1",
     ]
