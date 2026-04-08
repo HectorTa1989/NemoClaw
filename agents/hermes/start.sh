@@ -246,7 +246,7 @@ start_socat_forwarder() {
 DECODE_PROXY_PID=""
 DECODE_PROXY_PORT=3129
 start_decode_proxy() {
-  nohup python3 /opt/nemoclaw-decode-proxy.py >/dev/null 2>&1 &
+  nohup python3 /usr/local/bin/nemoclaw-decode-proxy >/dev/null 2>&1 &
   DECODE_PROXY_PID=$!
   # Wait for it to start listening
   local attempts=0
