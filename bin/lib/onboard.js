@@ -3517,6 +3517,30 @@ async function setupMessagingChannels() {
   return selected;
 }
 
+function getSuggestedPolicyPresets({ enabledChannels = null, webSearchConfig = null } = {}) {
+  const suggestions = ["pypi", "npm"];
+  const usesExplicitMessagingSelection = Array.isArray(enabledChannels);
+
+  const maybeSuggestMessagingPreset = (channel, envKey) => {
+    if (usesExplicitMessagingSelection) {
+      if (enabledChannels.includes(channel)) suggestions.push(channel);
+      return;
+    }
+    if (getCredential(envKey) || process.env[envKey]) {
+      suggestions.push(channel);
+      console.log(`  Auto-detected: ${envKey} -> suggesting ${channel} preset`);
+    }
+  };
+
+  maybeSuggestMessagingPreset("telegram", "TELEGRAM_BOT_TOKEN");
+  maybeSuggestMessagingPreset("slack", "SLACK_BOT_TOKEN");
+  maybeSuggestMessagingPreset("discord", "DISCORD_BOT_TOKEN");
+
+  if (webSearchConfig) suggestions.push("brave");
+
+  return suggestions;
+}
+
 // ── Step 7: OpenClaw ─────────────────────────────────────────────
 
 async function setupOpenclaw(sandboxName, model, provider) {
@@ -3546,24 +3570,9 @@ async function setupOpenclaw(sandboxName, model, provider) {
 // ── Step 7: Policy presets ───────────────────────────────────────
 
 // eslint-disable-next-line complexity
-async function _setupPolicies(sandboxName) {
+async function _setupPolicies(sandboxName, options = {}) {
   step(8, 8, "Policy presets");
-
-  const suggestions = ["pypi", "npm"];
-
-  // Auto-detect based on env tokens
-  if (getCredential("TELEGRAM_BOT_TOKEN")) {
-    suggestions.push("telegram");
-    console.log("  Auto-detected: TELEGRAM_BOT_TOKEN → suggesting telegram preset");
-  }
-  if (getCredential("SLACK_BOT_TOKEN") || process.env.SLACK_BOT_TOKEN) {
-    suggestions.push("slack");
-    console.log("  Auto-detected: SLACK_BOT_TOKEN → suggesting slack preset");
-  }
-  if (getCredential("DISCORD_BOT_TOKEN") || process.env.DISCORD_BOT_TOKEN) {
-    suggestions.push("discord");
-    console.log("  Auto-detected: DISCORD_BOT_TOKEN → suggesting discord preset");
-  }
+  const suggestions = getSuggestedPolicyPresets(options);
 
   const allPresets = policies.listPresets();
   const applied = policies.getAppliedPresets(sandboxName);
@@ -3824,15 +3833,11 @@ async function setupPoliciesWithSelection(sandboxName, options = {}) {
   const selectedPresets = Array.isArray(options.selectedPresets) ? options.selectedPresets : null;
   const onSelection = typeof options.onSelection === "function" ? options.onSelection : null;
   const webSearchConfig = options.webSearchConfig || null;
+  const enabledChannels = Array.isArray(options.enabledChannels) ? options.enabledChannels : null;
 
   step(8, 8, "Policy presets");
 
-  const suggestions = ["pypi", "npm"];
-  if (getCredential("TELEGRAM_BOT_TOKEN")) suggestions.push("telegram");
-  if (getCredential("SLACK_BOT_TOKEN") || process.env.SLACK_BOT_TOKEN) suggestions.push("slack");
-  if (getCredential("DISCORD_BOT_TOKEN") || process.env.DISCORD_BOT_TOKEN)
-    suggestions.push("discord");
-  if (webSearchConfig) suggestions.push("brave");
+  const suggestions = getSuggestedPolicyPresets({ enabledChannels, webSearchConfig });
 
   const allPresets = policies.listPresets();
   const applied = policies.getAppliedPresets(sandboxName);
@@ -4379,6 +4384,10 @@ async function onboard(opts = {}) {
       });
     }
 
+    let selectedMessagingChannels = Array.isArray(session?.messagingChannels)
+      ? session.messagingChannels
+      : null;
+
     const sandboxReuseState = getSandboxReuseState(sandboxName);
     const resumeSandbox =
       resume && session?.steps?.sandbox?.status === "complete" && sandboxReuseState === "ready";
@@ -4398,7 +4407,11 @@ async function onboard(opts = {}) {
           }
         }
       }
-      const enabledChannels = await setupMessagingChannels();
+      selectedMessagingChannels = await setupMessagingChannels();
+      onboardSession.updateSession((current) => {
+        current.messagingChannels = selectedMessagingChannels;
+        return current;
+      });
 
       startRecordedStep("sandbox", { sandboxName, provider, model });
       sandboxName = await createSandbox(
@@ -4408,7 +4421,7 @@ async function onboard(opts = {}) {
         preferredInferenceApi,
         sandboxName,
         webSearchConfig,
-        enabledChannels,
+        selectedMessagingChannels,
         fromDockerfile,
       );
       onboardSession.markStepComplete("sandbox", { sandboxName, provider, model, nimContainer });
@@ -4452,6 +4465,7 @@ async function onboard(opts = {}) {
           recordedPolicyPresets.length > 0
             ? recordedPolicyPresets
             : null,
+        enabledChannels: selectedMessagingChannels,
         webSearchConfig,
         onSelection: (policyPresets) => {
           onboardSession.updateSession((current) => {
@@ -4524,6 +4538,7 @@ module.exports = {
   isInferenceRouteReady,
   isOpenclawReady,
   arePolicyPresetsApplied,
+  getSuggestedPolicyPresets,
   presetsCheckboxSelector,
   setupPoliciesWithSelection,
   summarizeCurlFailure,

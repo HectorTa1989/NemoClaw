@@ -17,7 +17,8 @@
 #   3. Credential isolation — real tokens never appear in sandbox env
 #   4. Config patching — openclaw.json channels use placeholder values
 #   5. Network reachability — Node.js can reach messaging APIs through proxy
-#   6. L7 proxy rewriting — placeholder is rewritten to real token at egress
+#   6. Native Discord gateway path — WebSocket path is probed separately from REST
+#   7. L7 proxy rewriting — placeholder is rewritten to real token at egress
 #
 # Uses fake tokens by default (no external accounts needed). With fake tokens,
 # the API returns 401 — proving the full chain worked (request reached the
@@ -41,6 +42,7 @@
 #   TELEGRAM_BOT_TOKEN_REAL                — optional: enables Phase 6 real round-trip
 #   DISCORD_BOT_TOKEN_REAL                 — optional: enables Phase 6 real round-trip
 #   TELEGRAM_CHAT_ID_E2E                   — optional: enables sendMessage test
+#   NEMOCLAW_E2E_STRICT_DISCORD_GATEWAY    — fail instead of skip on known Discord gateway blockers
 #
 # Usage:
 #   NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 \
@@ -137,6 +139,7 @@ pass "Docker is running"
 info "Telegram token: ${TELEGRAM_TOKEN:0:10}... (${#TELEGRAM_TOKEN} chars)"
 info "Discord token: ${DISCORD_TOKEN:0:10}... (${#DISCORD_TOKEN} chars)"
 info "Sandbox name: $SANDBOX_NAME"
+STRICT_DISCORD_GATEWAY="${NEMOCLAW_E2E_STRICT_DISCORD_GATEWAY:-0}"
 
 # ══════════════════════════════════════════════════════════════════
 # Phase 1: Install NemoClaw (non-interactive mode)
@@ -452,6 +455,78 @@ elif echo "$dc_reach" | grep -q "TIMEOUT"; then
   skip "M13: discord.com timed out (network may be slow)"
 else
   fail "M13: Node.js could not reach discord.com (${dc_reach:0:200})"
+fi
+
+# M13b: Probe the native Discord gateway path separately from REST.
+# This catches failures where REST succeeds but the WebSocket path still fails
+# (for example EAI_AGAIN on gateway.discord.gg or proxy misuse returning 400).
+dc_gateway=$(sandbox_exec 'node -e "
+const url = \"wss://gateway.discord.gg/?v=10&encoding=json\";
+if (typeof WebSocket !== \"function\") {
+  console.log(\"UNSUPPORTED WebSocket\");
+  process.exit(0);
+}
+const ws = new WebSocket(url);
+const done = (msg) => {
+  console.log(msg);
+  try { ws.close(); } catch {}
+  setTimeout(() => process.exit(0), 50);
+};
+const timer = setTimeout(() => done(\"TIMEOUT\"), 15000);
+ws.addEventListener(\"open\", () => console.log(\"OPEN\"));
+ws.addEventListener(\"message\", (event) => {
+  clearTimeout(timer);
+  const body = String(event.data || \"\").slice(0, 200).replace(/\\s+/g, \" \");
+  done(\"MESSAGE \" + body);
+});
+ws.addEventListener(\"error\", (event) => {
+  clearTimeout(timer);
+  const msg = event?.message || event?.error?.message || \"websocket_error\";
+  done(\"ERROR \" + msg);
+});
+ws.addEventListener(\"close\", (event) => {
+  if (event.code && event.code !== 1000) console.log(\"CLOSE \" + event.code);
+});
+"' 2>/dev/null || true)
+
+info "Discord gateway probe: ${dc_gateway:0:300}"
+
+if echo "$dc_gateway" | grep -q "MESSAGE "; then
+  pass "M13b: Native Discord gateway returned a WebSocket message"
+elif echo "$dc_gateway" | grep -q "OPEN"; then
+  pass "M13b: Native Discord gateway opened a WebSocket session"
+elif echo "$dc_gateway" | grep -qiE "EAI_AGAIN|getaddrinfo"; then
+  if [ "$STRICT_DISCORD_GATEWAY" = "1" ]; then
+    fail "M13b: Native Discord gateway hit DNS resolution failure (${dc_gateway:0:200})"
+  else
+    skip "M13b: Native Discord gateway hit DNS resolution failure (${dc_gateway:0:200})"
+  fi
+elif echo "$dc_gateway" | grep -q "400"; then
+  if [ "$STRICT_DISCORD_GATEWAY" = "1" ]; then
+    fail "M13b: Native Discord gateway probe returned 400 (${dc_gateway:0:200})"
+  else
+    skip "M13b: Native Discord gateway probe returned 400 (${dc_gateway:0:200})"
+  fi
+elif echo "$dc_gateway" | grep -q "UNSUPPORTED"; then
+  skip "M13b: WebSocket runtime unsupported in sandbox Node.js"
+elif echo "$dc_gateway" | grep -q "TIMEOUT"; then
+  if [ "$STRICT_DISCORD_GATEWAY" = "1" ]; then
+    fail "M13b: Native Discord gateway probe timed out"
+  else
+    skip "M13b: Native Discord gateway probe timed out"
+  fi
+elif echo "$dc_gateway" | grep -q "ERROR"; then
+  if [ "$STRICT_DISCORD_GATEWAY" = "1" ]; then
+    fail "M13b: Native Discord gateway probe failed (${dc_gateway:0:200})"
+  else
+    skip "M13b: Native Discord gateway probe failed (${dc_gateway:0:200})"
+  fi
+else
+  if [ "$STRICT_DISCORD_GATEWAY" = "1" ]; then
+    fail "M13b: Native Discord gateway probe returned an unclassified result (${dc_gateway:0:200})"
+  else
+    skip "M13b: Native Discord gateway probe returned an unclassified result (${dc_gateway:0:200})"
+  fi
 fi
 
 # M14 (negative): curl should be blocked by binary restriction

@@ -143,6 +143,14 @@ describe("policies", () => {
       expect(policies.loadPreset("../../etc/passwd")).toBe(null);
       expect(policies.loadPreset("../../../etc/shadow")).toBe(null);
     });
+
+    it("includes /usr/bin/node in communication presets", () => {
+      for (const preset of ["discord", "slack", "telegram"]) {
+        const content = policies.loadPreset(preset);
+        expect(content).toContain("/usr/local/bin/node");
+        expect(content).toContain("/usr/bin/node");
+      }
+    });
   });
 
   describe("getPresetEndpoints", () => {

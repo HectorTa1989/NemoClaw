@@ -25,6 +25,7 @@ import {
   getRequestedModelHint,
   getRequestedProviderHint,
   getRequestedSandboxNameHint,
+  getSuggestedPolicyPresets,
   getResumeConfigConflicts,
   getResumeSandboxConflict,
   getSandboxStateFromOutputs,
@@ -100,6 +101,30 @@ describe("onboard helpers", () => {
     assert.doesNotMatch(script, /cat > ~\/\.openclaw\/openclaw\.json/);
     assert.doesNotMatch(script, /openclaw models set/);
     assert.match(script, /^exit$/m);
+  });
+
+  it("uses explicit messaging selections for policy suggestions when provided", () => {
+    process.env.TELEGRAM_BOT_TOKEN = "telegram-token";
+    process.env.DISCORD_BOT_TOKEN = "discord-token";
+    process.env.SLACK_BOT_TOKEN = "slack-token";
+    try {
+      expect(getSuggestedPolicyPresets({ enabledChannels: [] })).toEqual(["pypi", "npm"]);
+      expect(getSuggestedPolicyPresets({ enabledChannels: ["telegram"] })).toEqual([
+        "pypi",
+        "npm",
+        "telegram",
+      ]);
+      expect(getSuggestedPolicyPresets({ enabledChannels: ["discord", "slack"] })).toEqual([
+        "pypi",
+        "npm",
+        "slack",
+        "discord",
+      ]);
+    } finally {
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.DISCORD_BOT_TOKEN;
+      delete process.env.SLACK_BOT_TOKEN;
+    }
   });
 
   it("patches the staged Dockerfile with the selected model and chat UI URL", () => {
