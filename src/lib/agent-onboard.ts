@@ -183,13 +183,16 @@ export async function handleAgentSetup(
       }
       sleep(pollInterval);
     }
-    if (!healthy) {
-      throw new Error(
-        `${agent.displayName} gateway health check timed out after ${timeoutSecs}s. ` +
-          `Check logs with: nemoclaw ${sandboxName} logs`,
+    if (healthy) {
+      console.log(`  \u2713 ${agent.displayName} gateway is healthy`);
+    } else {
+      console.log(
+        `  \u26a0 ${agent.displayName} gateway did not respond within ${timeoutSecs}s.`,
+      );
+      console.log(
+        `    The gateway may still be starting. Check: nemoclaw ${sandboxName} logs`,
       );
     }
-    console.log(`  \u2713 ${agent.displayName} gateway is healthy`);
   } else {
     console.log(`  \u2713 ${agent.displayName} configured inside sandbox`);
   }

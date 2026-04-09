@@ -105,7 +105,8 @@ RUN sha256sum /sandbox/.hermes/config.yaml /sandbox/.hermes/.env \
     && chmod 444 /sandbox/.hermes/.config-hash \
     && chown root:root /sandbox/.hermes/.config-hash
 
-USER sandbox
-
+# start.sh handles privilege separation: runs as root initially to perform
+# symlink validation and hardening, then drops to 'gateway' user via gosu
+# for the agent process. See the root-path branch in start.sh.
 ENTRYPOINT ["/usr/local/bin/nemoclaw-start"]
 CMD ["/bin/bash"]
