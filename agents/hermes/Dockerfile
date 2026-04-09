@@ -86,8 +86,7 @@ RUN node --experimental-strip-types /opt/nemoclaw-generate-config.ts
 
 # Install NemoClaw plugin into Hermes
 RUN mkdir -p /sandbox/.hermes-data/plugins/nemoclaw \
-    && cp /opt/nemoclaw-hermes-plugin/* /sandbox/.hermes-data/plugins/nemoclaw/ \
-    || true
+    && cp -r /opt/nemoclaw-hermes-plugin/* /sandbox/.hermes-data/plugins/nemoclaw/
 
 # Lock .hermes via DAC: chown to root so sandbox user cannot modify config.
 # Same pattern as OpenClaw — Landlock provides defense-in-depth.
@@ -105,6 +104,8 @@ RUN sha256sum /sandbox/.hermes/config.yaml /sandbox/.hermes/.env \
     > /sandbox/.hermes/.config-hash \
     && chmod 444 /sandbox/.hermes/.config-hash \
     && chown root:root /sandbox/.hermes/.config-hash
+
+USER sandbox
 
 ENTRYPOINT ["/usr/local/bin/nemoclaw-start"]
 CMD ["/bin/bash"]

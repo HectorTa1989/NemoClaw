@@ -243,7 +243,7 @@ fi
 # 3c: Session records agent=hermes
 session_file="$HOME/.nemoclaw/onboard-session.json"
 if [ -f "$session_file" ]; then
-  if grep -q '"agent"' "$session_file" && grep -q '"hermes"' "$session_file"; then
+  if grep -qE '"agent"\s*:\s*"hermes"' "$session_file"; then
     pass "Onboard session records agent=hermes"
   else
     fail "Onboard session does not contain agent=hermes"
