@@ -13,8 +13,31 @@
 import { isRiskyFile, isTestFile, run, ghJson, parseStringArg } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
+// Required CI checks
+// ---------------------------------------------------------------------------
+
+// Checks triggered by `pull_request` events. First-time fork contributors
+// need a maintainer to click "Approve and run" before these execute.
+// If any are missing from statusCheckRollup, CI cannot be considered green.
+const REQUIRED_CHECK_NAMES: string[] = [
+  "checks",       // pr.yaml — lint, typecheck, test
+  "commit-lint",  // commit-lint.yaml
+  "dco-check",    // dco-check.yaml
+];
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Union of CheckRun and StatusContext fields from GitHub's statusCheckRollup. */
+interface StatusCheck {
+  __typename?: string;
+  name?: string;       // CheckRun field
+  context?: string;    // StatusContext field
+  status?: string;     // CheckRun: COMPLETED, IN_PROGRESS, QUEUED, etc.
+  conclusion?: string; // CheckRun: SUCCESS, FAILURE, NEUTRAL, SKIPPED, etc.
+  state?: string;      // StatusContext: SUCCESS, FAILURE, PENDING, ERROR
+}
 
 interface GateResult {
   pass: boolean;
@@ -34,7 +57,7 @@ interface GateOutput {
   title: string;
   allPass: boolean;
   gates: {
-    ci: GateResult & { failingChecks?: string[]; pendingChecks?: string[] };
+    ci: GateResult & { failingChecks?: string[]; pendingChecks?: string[]; missingChecks?: string[] };
     conflicts: GateResult & { mergeStateStatus?: string };
     coderabbit: GateResult & { unresolvedThreads?: CodeRabbitThread[] };
     riskyCodeTested: GateResult & { riskyFiles?: string[]; hasTests?: boolean };
@@ -46,10 +69,26 @@ interface GateOutput {
 // ---------------------------------------------------------------------------
 
 function checkCi(
-  statusCheckRollup: Array<{ name: string; status: string; conclusion: string }> | null,
-): GateResult & { failingChecks?: string[]; pendingChecks?: string[] } {
+  statusCheckRollup: StatusCheck[] | null,
+): GateResult & { failingChecks?: string[]; pendingChecks?: string[]; missingChecks?: string[] } {
   if (!statusCheckRollup || statusCheckRollup.length === 0) {
     return { pass: false, details: "No status checks found" };
+  }
+
+  // Check that all required checks are present.
+  // Fork PRs from first-time contributors need "Approve and run" before
+  // pull_request workflows execute. Until then only pull_request_target
+  // checks (like check-pr-limit) and external bots (CodeRabbit) appear.
+  const presentNames = new Set(
+    statusCheckRollup.map((c) => c.name ?? c.context ?? "").filter(Boolean),
+  );
+  const missingChecks = REQUIRED_CHECK_NAMES.filter((name) => !presentNames.has(name));
+  if (missingChecks.length > 0) {
+    return {
+      pass: false,
+      details: `${missingChecks.length} required check(s) not found — workflows may need approval`,
+      missingChecks,
+    };
   }
 
   const passing = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
@@ -57,17 +96,26 @@ function checkCi(
   const pending: string[] = [];
 
   for (const check of statusCheckRollup) {
+    const checkName = check.name ?? check.context ?? "(unknown)";
+
+    // StatusContext (e.g. CodeRabbit) uses `state` instead of `status`/`conclusion`.
+    if (check.__typename === "StatusContext") {
+      const state = (check.state ?? "").toUpperCase();
+      if (!state || state === "PENDING") {
+        pending.push(checkName);
+      } else if (state !== "SUCCESS") {
+        failing.push(`${checkName}: ${state}`);
+      }
+      continue;
+    }
+
+    // CheckRun uses `status` and `conclusion`.
     const conclusion = (check.conclusion ?? "").toUpperCase();
     const status = (check.status ?? "").toUpperCase();
-
-    // CodeRabbit reports as a commit status with null name/status but a
-    // non-null conclusion. Treat it as completed if conclusion is present.
-    const effectivelyCompleted = status === "COMPLETED" || (!status && conclusion);
-
-    if (!effectivelyCompleted) {
-      pending.push(check.name ?? "(unknown)");
+    if (status !== "COMPLETED") {
+      pending.push(checkName);
     } else if (!passing.has(conclusion)) {
-      failing.push(`${check.name ?? "(unknown)"}: ${conclusion}`);
+      failing.push(`${checkName}: ${conclusion}`);
     }
   }
 
@@ -265,7 +313,7 @@ function main(): void {
     title: string;
     url: string;
     files: Array<{ path: string; status: string }>;
-    statusCheckRollup: Array<{ name: string; status: string; conclusion: string }>;
+    statusCheckRollup: StatusCheck[];
     mergeStateStatus: string;
   } | null;
 

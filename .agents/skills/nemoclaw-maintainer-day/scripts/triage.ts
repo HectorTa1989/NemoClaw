@@ -212,7 +212,24 @@ function classifyPr(pr: PrData): ClassifiedPr {
   const checks = pr.statusCheckRollup ?? [];
   const passingConclusions = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
   let checksGreen = checks.length > 0;
+
+  // Verify required checks are present. Fork PRs from first-time
+  // contributors need "Approve and run" before pull_request workflows
+  // execute. Until then only pull_request_target checks and external
+  // bots appear — treat that as not-green.
+  const REQUIRED_CHECKS = ["checks", "commit-lint", "dco-check"];
+  const presentNames = new Set(
+    checks.map((c) => {
+      const asAny = c as Record<string, string>;
+      return asAny.name ?? asAny.context ?? "";
+    }).filter(Boolean),
+  );
+  if (REQUIRED_CHECKS.some((name) => !presentNames.has(name))) {
+    checksGreen = false;
+  }
+
   for (const check of checks) {
+    if (!checksGreen) break;
     const asAny = check as Record<string, string>;
     // StatusContext uses "state", CheckRun uses "conclusion"+"status"
     if (asAny.state) {
