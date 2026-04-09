@@ -929,11 +929,12 @@ def generate_skill(
     lines: list[str] = []
 
     # Frontmatter
-    lines.append(markdown_spdx_header().rstrip("\n"))
     lines.append("---")
     lines.append(f"name: {yaml_scalar(name)}")
     lines.append(f"description: {yaml_scalar(description)}")
     lines.append("---")
+    lines.append("")
+    lines.append(markdown_spdx_header().rstrip("\n"))
     lines.append("")
 
     # Title

@@ -15,8 +15,8 @@ const spdxHeader = [
   "<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->",
   "<!-- SPDX-License-Identifier: Apache-2.0 -->",
 ].join("\n");
-const frontmatterRe =
-  /^<!-- SPDX-FileCopyrightText: Copyright \(c\) 2026 NVIDIA CORPORATION & AFFILIATES\. All rights reserved\. -->\r?\n<!-- SPDX-License-Identifier: Apache-2\.0 -->\r?\n(?:\r?\n)?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+// SKILL.md: frontmatter first, then SPDX after the closing ---
+const skillFrontmatterRe = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 
 function listMarkdownFiles(root) {
   const files = [];
@@ -49,10 +49,17 @@ describe("repo skill markdown files", () => {
 
   for (const markdownFile of generatedUserSkillFiles) {
     const relPath = path.relative(repoRoot, markdownFile);
+    const isSkill = path.basename(markdownFile) === "SKILL.md";
 
     it(`includes SPDX header for ${relPath}`, () => {
       const raw = fs.readFileSync(markdownFile, "utf8");
-      expect(raw.startsWith(spdxHeader), `${relPath} is missing SPDX header`).toBe(true);
+      if (isSkill) {
+        // SKILL.md: SPDX must appear after frontmatter (not before, to preserve markdownlint compatibility)
+        expect(raw.includes(spdxHeader), `${relPath} is missing SPDX header`).toBe(true);
+      } else {
+        // Reference files: SPDX at the top
+        expect(raw.startsWith(spdxHeader), `${relPath} is missing SPDX header at start`).toBe(true);
+      }
     });
   }
 
@@ -63,9 +70,9 @@ describe("repo skill markdown files", () => {
 
     it(`parses valid YAML frontmatter for ${relPath}`, () => {
       const raw = fs.readFileSync(skillFile, "utf8");
-      const match = raw.match(frontmatterRe);
+      const match = raw.match(skillFrontmatterRe);
 
-      expect(match, `${relPath} must place the SPDX header before YAML frontmatter`).not.toBeNull();
+      expect(match, `${relPath} must start with YAML frontmatter`).not.toBeNull();
 
       const frontmatterText = match[1];
       const doc = YAML.parseDocument(frontmatterText, { prettyErrors: true });
@@ -87,7 +94,14 @@ describe("repo skill markdown files", () => {
         `${relPath} is missing frontmatter.description`,
       ).toBeGreaterThan(0);
 
-      const body = raw.slice(match[0].length).trim();
+      // SPDX must appear after frontmatter
+      const afterFrontmatter = raw.slice(match[0].length);
+      expect(
+        afterFrontmatter.includes(spdxHeader),
+        `${relPath} must include SPDX header after frontmatter`,
+      ).toBe(true);
+
+      const body = raw.slice(match[0].length).replace(spdxHeader, "").trim();
       expect(body.length, `${relPath} body is too short`).toBeGreaterThan(20);
     });
   }
