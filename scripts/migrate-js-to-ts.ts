@@ -194,13 +194,38 @@ function distSpecifierFor(oldRel: string, newRel: string): string {
   return ensureDotSlash(relative);
 }
 
-function buildWrapper(oldRel: string, newRel: string, strategy: ShimStrategy): string {
+function extractNamedExports(content: string): string[] {
+  const match = content.match(/export\s*\{([\s\S]*?)\};/m);
+  if (!match) {
+    return [];
+  }
+  return match[1]
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function buildExplicitWrapperExports(exportNames: string[]): string {
+  if (exportNames.length === 0) {
+    return "module.exports = mod;\n";
+  }
+  const lines = exportNames.map((name) => `  ${name}: mod.${name},`);
+  return `module.exports = {\n${lines.join("\n")}\n};\n`;
+}
+
+function buildWrapper(
+  oldRel: string,
+  newRel: string,
+  strategy: ShimStrategy,
+  exportNames: string[],
+): string {
   const distSpecifier = distSpecifierFor(oldRel, newRel);
+  const explicitExports = buildExplicitWrapperExports(exportNames);
   switch (strategy) {
     case "simple":
-      return `${WRAPPER_HEADER}\n\nmodule.exports = require(${JSON.stringify(distSpecifier)});\n`;
+      return `${WRAPPER_HEADER}\n\nconst mod = require(${JSON.stringify(distSpecifier)});\n${explicitExports}`;
     case "cache-busting":
-      return `${WRAPPER_HEADER}\n\nconst distPath = require.resolve(${JSON.stringify(distSpecifier)});\ndelete require.cache[distPath];\nmodule.exports = require(distPath);\n`;
+      return `${WRAPPER_HEADER}\n\nconst distPath = require.resolve(${JSON.stringify(distSpecifier)});\ndelete require.cache[distPath];\nconst mod = require(distPath);\n${explicitExports}`;
     case "cli-launcher":
       return `#!/usr/bin/env node\n${WRAPPER_HEADER}\n\nrequire(${JSON.stringify(distSpecifier)});\n`;
     default: {
@@ -277,7 +302,7 @@ function moveRuntime(oldRel: string, newRel: string, strategy: ShimStrategy, app
   const withNoCheck = rewritten.startsWith("// @ts-nocheck")
     ? rewritten
     : `// @ts-nocheck\n${rewritten}`;
-  const wrapper = buildWrapper(oldRel, newRel, strategy);
+  const wrapper = buildWrapper(oldRel, newRel, strategy, extractNamedExports(withNoCheck));
 
   if (!apply) {
     console.log(`move runtime: ${oldRel} -> ${newRel} (${strategy})`);
