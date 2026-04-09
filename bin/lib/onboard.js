@@ -960,6 +960,7 @@ function patchStagedDockerfile(
   webSearchConfig = null,
   messagingChannels = [],
   messagingAllowedIds = {},
+  discordGuilds = {},
 ) {
   const { providerKey, primaryModelRef, inferenceBaseUrl, inferenceApi, inferenceCompat } =
     getSandboxInferenceConfig(model, provider, preferredInferenceApi);
@@ -1033,6 +1034,12 @@ function patchStagedDockerfile(
     dockerfile = dockerfile.replace(
       /^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*$/m,
       `ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=${encodeDockerJsonArg(messagingAllowedIds)}`,
+    );
+  }
+  if (Object.keys(discordGuilds).length > 0) {
+    dockerfile = dockerfile.replace(
+      /^ARG NEMOCLAW_DISCORD_GUILDS_B64=.*$/m,
+      `ARG NEMOCLAW_DISCORD_GUILDS_B64=${encodeDockerJsonArg(discordGuilds)}`,
     );
   }
   fs.writeFileSync(dockerfilePath, dockerfile);
@@ -2409,12 +2416,35 @@ async function createSandbox(
   const messagingAllowedIds = {};
   const enabledTokenEnvKeys = new Set(messagingTokenDefs.map(({ envKey }) => envKey));
   for (const ch of MESSAGING_CHANNELS) {
-    if (enabledTokenEnvKeys.has(ch.envKey) && ch.userIdEnvKey && process.env[ch.userIdEnvKey]) {
+    if (
+      enabledTokenEnvKeys.has(ch.envKey) &&
+      ch.allowIdsMode === "dm" &&
+      ch.userIdEnvKey &&
+      process.env[ch.userIdEnvKey]
+    ) {
       const ids = process.env[ch.userIdEnvKey]
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
       if (ids.length > 0) messagingAllowedIds[ch.name] = ids;
+    }
+  }
+  const discordGuilds = {};
+  if (enabledTokenEnvKeys.has("DISCORD_BOT_TOKEN")) {
+    const serverIds = (process.env.DISCORD_SERVER_IDS || process.env.DISCORD_SERVER_ID || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const userIds = (process.env.DISCORD_ALLOWED_IDS || process.env.DISCORD_USER_ID || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const requireMention = process.env.DISCORD_REQUIRE_MENTION !== "0";
+    for (const serverId of serverIds) {
+      discordGuilds[serverId] = {
+        requireMention,
+        ...(userIds.length > 0 ? { users: userIds } : {}),
+      };
     }
   }
   patchStagedDockerfile(
@@ -2427,6 +2457,7 @@ async function createSandbox(
     webSearchConfig,
     activeMessagingChannels,
     messagingAllowedIds,
+    discordGuilds,
   );
   // Only pass non-sensitive env vars to the sandbox. Credentials flow through
   // OpenShell providers — the gateway injects them as placeholders and the L7
@@ -3347,6 +3378,7 @@ const MESSAGING_CHANNELS = [
     userIdEnvKey: "TELEGRAM_ALLOWED_IDS",
     userIdHelp: "Send /start to @userinfobot on Telegram to get your numeric user ID.",
     userIdLabel: "Telegram User ID (for DM access)",
+    allowIdsMode: "dm",
   },
   {
     name: "discord",
@@ -3354,6 +3386,15 @@ const MESSAGING_CHANNELS = [
     description: "Discord bot messaging",
     help: "Discord Developer Portal → Applications → Bot → Reset/Copy Token.",
     label: "Discord Bot Token",
+    serverIdEnvKey: "DISCORD_SERVER_ID",
+    serverIdHelp:
+      "Enable Developer Mode in Discord, then right-click your server and copy the Server ID.",
+    serverIdLabel: "Discord Server ID (for guild workspace access)",
+    userIdEnvKey: "DISCORD_USER_ID",
+    userIdHelp:
+      "Enable Developer Mode in Discord, then right-click your user/avatar and copy the User ID.",
+    userIdLabel: "Discord User ID (for guild allowlist)",
+    allowIdsMode: "guild",
   },
   {
     name: "slack",
@@ -3496,7 +3537,22 @@ async function setupMessagingChannels() {
         continue;
       }
     }
-    // Prompt for user/sender ID if the channel supports DM allowlisting
+    if (ch.serverIdEnvKey) {
+      const existingServerIds = process.env[ch.serverIdEnvKey] || "";
+      if (existingServerIds) {
+        console.log(`  ✓ ${ch.name} — server ID already set: ${existingServerIds}`);
+      } else {
+        console.log(`  ${ch.serverIdHelp}`);
+        const serverId = (await prompt(`  ${ch.serverIdLabel}: `)).trim();
+        if (serverId) {
+          process.env[ch.serverIdEnvKey] = serverId;
+          console.log(`  ✓ ${ch.name} server ID saved`);
+        } else {
+          console.log(`  Skipped ${ch.name} server ID (guild channels stay disabled)`);
+        }
+      }
+    }
+    // Prompt for user/sender ID when the channel supports allowlisting
     if (ch.userIdEnvKey) {
       const existingIds = process.env[ch.userIdEnvKey] || "";
       if (existingIds) {
@@ -3508,7 +3564,11 @@ async function setupMessagingChannels() {
           process.env[ch.userIdEnvKey] = userId;
           console.log(`  ✓ ${ch.name} user ID saved`);
         } else {
-          console.log(`  Skipped ${ch.name} user ID (bot will require manual pairing)`);
+          const skippedReason =
+            ch.allowIdsMode === "guild"
+              ? "guild access stays restricted until you configure it later"
+              : "bot will require manual pairing";
+          console.log(`  Skipped ${ch.name} user ID (${skippedReason})`);
         }
       }
     }
