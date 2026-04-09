@@ -10,7 +10,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const { ROOT, run, runCapture, shellQuote } = require("./runner");
+const { ROOT, run, shellQuote } = require("./runner");
 const { getAgentChoices, loadAgent, resolveAgentName } = require("./agent-defs");
 const { getProviderSelectionConfig } = require("./inference-config");
 const onboardSession = require("./onboard-session");
@@ -112,10 +112,10 @@ function createAgentSandbox(agent) {
 
   if (baseDockerfile) {
     const baseImageTag = `ghcr.io/nvidia/nemoclaw/${agent.name}-sandbox-base:latest`;
-    const checkResult = runCapture(`docker image inspect ${shellQuote(baseImageTag)} 2>&1`, {
+    const inspectResult = run(`docker image inspect ${shellQuote(baseImageTag)} >/dev/null 2>&1`, {
       ignoreError: true,
     });
-    if (!checkResult) {
+    if (inspectResult.status !== 0) {
       console.log(`  Building ${agent.displayName} base image (first time only)...`);
       run(
         `docker build -f ${shellQuote(baseDockerfile)} -t ${shellQuote(baseImageTag)} ${shellQuote(ROOT)}`,
@@ -171,7 +171,6 @@ function sleep(seconds) {
 async function handleAgentSetup(sandboxName, model, provider, agent, resume, session, ctx) {
   const {
     step,
-    isSandboxReady,
     runCaptureOpenshell,
     openshellShellCommand,
     buildSandboxConfigSyncScript,
@@ -181,14 +180,20 @@ async function handleAgentSetup(sandboxName, model, provider, agent, resume, ses
     skippedStepMessage,
   } = ctx;
 
-  // Resume check: for non-OpenClaw agents, the sandbox being live is enough
-  // (the entrypoint handles agent startup).
+  // Resume check: verify the agent's health probe, not just pod readiness.
+  // A running sandbox doesn't guarantee the agent gateway has bound its port.
   if (resume && sandboxName) {
-    const list = runCaptureOpenshell(["sandbox", "list"], { ignoreError: true });
-    if (isSandboxReady(list, sandboxName)) {
-      skippedStepMessage("agent_setup", sandboxName);
-      onboardSession.markStepComplete("agent_setup", { sandboxName, provider, model });
-      return;
+    const probe = agent.healthProbe;
+    if (probe?.url) {
+      const result = runCaptureOpenshell(
+        ["sandbox", "exec", sandboxName, "curl", "-sf", "--max-time", "3", probe.url],
+        { ignoreError: true },
+      );
+      if (result && result.includes("ok")) {
+        skippedStepMessage("agent_setup", sandboxName);
+        onboardSession.markStepComplete("agent_setup", { sandboxName, provider, model });
+        return;
+      }
     }
   }
 

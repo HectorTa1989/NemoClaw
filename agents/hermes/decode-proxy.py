@@ -29,17 +29,20 @@ LISTEN_PORT = 3129
 
 async def handle_client(reader, writer):
     """Proxy a single connection, URL-decoding the initial request line."""
+    up_writer = None
     try:
         first_line = await asyncio.wait_for(reader.readline(), timeout=10)
         if not first_line:
             writer.close()
             return
 
-        # Decode the request line (e.g. CONNECT api.telegram.org:443 HTTP/1.1)
-        # or GET /botopenshell%3Aresolve%3Aenv%3ATOKEN/getMe HTTP/1.1
-        decoded_line = unquote(first_line.decode("utf-8", errors="replace")).encode(
-            "utf-8"
-        )
+        # Decode only the request target (second token) so valid percent-encoding
+        # like %2F or %3F in the method/version is preserved. Only the path
+        # contains openshell%3Aresolve placeholders that need decoding.
+        parts = first_line.decode("utf-8", errors="replace").split(" ", 2)
+        if len(parts) == 3:
+            parts[1] = unquote(parts[1])
+        decoded_line = " ".join(parts).encode("utf-8")
 
         # Read remaining headers
         headers = bytearray(decoded_line)
@@ -64,7 +67,13 @@ async def handle_client(reader, writer):
     except (asyncio.TimeoutError, ConnectionError, OSError):
         pass
     finally:
-        writer.close()
+        for w in (up_writer, writer):
+            if w is not None:
+                try:
+                    w.close()
+                    await w.wait_closed()
+                except (ConnectionError, OSError):
+                    pass
 
 
 async def _relay(src, dst):

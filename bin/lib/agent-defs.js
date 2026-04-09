@@ -211,11 +211,24 @@ function resolveAgentName({ agentFlag = null, session = null } = {}) {
   const envAgent = process.env.NEMOCLAW_AGENT;
   if (envAgent) {
     const available = listAgents();
-    if (available.includes(envAgent)) return envAgent;
+    if (!available.includes(envAgent)) {
+      const choices = available.join(", ");
+      throw new Error(`Unknown agent '${envAgent}' (from NEMOCLAW_AGENT). Available: ${choices}`);
+    }
+    return envAgent;
   }
 
   // 3. Session state (resume)
-  if (session && session.agent) return session.agent;
+  if (session && session.agent) {
+    const available = listAgents();
+    if (!available.includes(session.agent)) {
+      console.error(
+        `  Warning: session references unknown agent '${session.agent}', falling back to openclaw.`,
+      );
+      return "openclaw";
+    }
+    return session.agent;
+  }
 
   // 4. Default
   return "openclaw";

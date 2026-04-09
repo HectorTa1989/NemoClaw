@@ -4450,7 +4450,6 @@ async function onboard(opts = {}) {
     if (agent) {
       await agentOnboard.handleAgentSetup(sandboxName, model, provider, agent, resume, session, {
         step,
-        isSandboxReady,
         runCaptureOpenshell,
         openshellShellCommand,
         buildSandboxConfigSyncScript,

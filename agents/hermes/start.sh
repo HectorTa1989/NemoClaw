@@ -327,7 +327,6 @@ fi
 # ── Main ─────────────────────────────────────────────────────────
 
 echo 'Setting up NemoClaw (Hermes)...' >&2
-[ -f .env ] && chmod 600 .env
 
 # ── Non-root fallback ──────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ]; then

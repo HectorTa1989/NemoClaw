@@ -804,6 +804,12 @@ async function onboard(args) {
       console.error("  --agent requires a name (e.g. openclaw, hermes)");
       process.exit(1);
     }
+    const { listAgents } = require("./lib/agent-defs");
+    const knownAgents = listAgents();
+    if (!knownAgents.includes(agentFlag)) {
+      console.error(`  Unknown agent '${agentFlag}'. Available: ${knownAgents.join(", ")}`);
+      process.exit(1);
+    }
     args = [...args.slice(0, agentIdx), ...args.slice(agentIdx + 2)];
   }
 
