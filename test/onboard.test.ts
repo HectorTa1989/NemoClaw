@@ -49,7 +49,7 @@ import { stageOptimizedSandboxBuildContext } from "../dist/lib/sandbox-build-con
 import { buildWebSearchDockerConfig } from "../dist/lib/web-search";
 
 const require = createRequire(import.meta.url);
-const { getSuggestedPolicyPresets } = require("../src/lib/onboard.ts");
+const { getSuggestedPolicyPresets } = require("../dist/lib/onboard.js");
 
 describe("onboard helpers", () => {
   it("classifies sandbox create timeout failures and tracks upload progress", () => {
