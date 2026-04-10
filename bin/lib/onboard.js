@@ -1,8 +1,8 @@
 // @ts-nocheck
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-const mod = require("../../dist/lib/onboard");
 
+const mod = require("../../dist/lib/onboard");
 module.exports = {
   buildProviderArgs: mod.buildProviderArgs,
   buildSandboxConfigSyncScript: mod.buildSandboxConfigSyncScript,
