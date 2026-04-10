@@ -4330,6 +4330,7 @@ async function onboard(opts = {}) {
 
   try {
     let session;
+    let selectedMessagingChannels = [];
     // Merged, absolute fromDockerfile: explicit flag/env takes precedence; on
     // resume falls back to what the original session recorded so the same image
     // is used even when --from is omitted from the resume invocation.
@@ -4594,13 +4595,12 @@ async function onboard(opts = {}) {
           }
         }
       }
+      startRecordedStep("sandbox", { sandboxName, provider, model });
       selectedMessagingChannels = await setupMessagingChannels();
       onboardSession.updateSession((current) => {
         current.messagingChannels = selectedMessagingChannels;
         return current;
       });
-
-      startRecordedStep("sandbox", { sandboxName, provider, model });
       sandboxName = await createSandbox(
         gpu,
         model,
