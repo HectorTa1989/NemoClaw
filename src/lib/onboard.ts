@@ -28,6 +28,7 @@ const {
   getDefaultOllamaModel,
   getBootstrapOllamaModelOptions,
   getLocalProviderBaseUrl,
+  getLocalProviderHealthCheck,
   getLocalProviderValidationBaseUrl,
   getOllamaModelOptions,
   getOllamaWarmupCommand,
@@ -2640,10 +2641,10 @@ async function setupNim(gpu) {
 
   // Detect local inference options
   const hasOllama = !!runCapture("command -v ollama", { ignoreError: true });
-  const ollamaRunning = !!runCapture("curl -sf http://localhost:11434/api/tags 2>/dev/null", {
+  const ollamaRunning = !!runCapture(getLocalProviderHealthCheck("ollama-local"), {
     ignoreError: true,
   });
-  const vllmRunning = !!runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", {
+  const vllmRunning = !!runCapture(getLocalProviderHealthCheck("vllm-local"), {
     ignoreError: true,
   });
   const requestedProvider = isNonInteractive() ? getNonInteractiveProvider() : null;
@@ -3169,7 +3170,7 @@ async function setupNim(gpu) {
         credentialEnv = "OPENAI_API_KEY";
         endpointUrl = getLocalProviderBaseUrl(provider);
         // Query vLLM for the actual model ID
-        const vllmModelsRaw = runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", {
+        const vllmModelsRaw = runCapture(getLocalProviderHealthCheck("vllm-local"), {
           ignoreError: true,
         });
         try {
