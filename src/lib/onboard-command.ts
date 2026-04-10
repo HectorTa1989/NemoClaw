@@ -7,6 +7,8 @@ export interface OnboardCommandOptions {
   recreateSandbox: boolean;
   fromDockerfile: string | null;
   acceptThirdPartySoftware: boolean;
+  agent: string | null;
+  dangerouslySkipPermissions: boolean;
 }
 
 export interface RunOnboardCommandDeps {
@@ -15,6 +17,7 @@ export interface RunOnboardCommandDeps {
   noticeAcceptEnv: string;
   env: NodeJS.ProcessEnv;
   runOnboard: (options: OnboardCommandOptions) => Promise<void>;
+  listAgents?: () => string[];
   log?: (message?: string) => void;
   error?: (message?: string) => void;
   exit?: (code: number) => never;
@@ -24,11 +27,16 @@ export interface RunDeprecatedOnboardAliasCommandDeps extends RunOnboardCommandD
   kind: "setup" | "setup-spark";
 }
 
-const ONBOARD_BASE_ARGS = ["--non-interactive", "--resume", "--recreate-sandbox"];
+const ONBOARD_BASE_ARGS = [
+  "--non-interactive",
+  "--resume",
+  "--recreate-sandbox",
+  "--dangerously-skip-permissions",
+];
 
 function onboardUsageLines(noticeAcceptFlag: string): string[] {
   return [
-    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [${noticeAcceptFlag}]`,
+    `  Usage: nemoclaw onboard [--non-interactive] [--resume] [--recreate-sandbox] [--from <Dockerfile>] [--agent <name>] [--dangerously-skip-permissions] [${noticeAcceptFlag}]`,
     "",
   ];
 }
@@ -43,7 +51,7 @@ export function parseOnboardArgs(
   args: string[],
   noticeAcceptFlag: string,
   noticeAcceptEnv: string,
-  deps: Pick<RunOnboardCommandDeps, "env" | "error" | "exit">,
+  deps: Pick<RunOnboardCommandDeps, "env" | "error" | "exit" | "listAgents">,
 ): OnboardCommandOptions {
   const error = deps.error ?? console.error;
   const exit = deps.exit ?? ((code: number) => process.exit(code));
@@ -61,6 +69,24 @@ export function parseOnboardArgs(
     parsedArgs.splice(fromIdx, 2);
   }
 
+  let agent: string | null = null;
+  const agentIdx = parsedArgs.indexOf("--agent");
+  if (agentIdx !== -1) {
+    const agentValue = parsedArgs[agentIdx + 1];
+    if (typeof agentValue !== "string" || agentValue.startsWith("--")) {
+      error("  --agent requires a name");
+      printOnboardUsage(error, noticeAcceptFlag);
+      exit(1);
+    }
+    const knownAgents = deps.listAgents?.() ?? [];
+    if (knownAgents.length > 0 && !knownAgents.includes(agentValue)) {
+      error(`  Unknown agent '${agentValue}'. Available: ${knownAgents.join(", ")}`);
+      exit(1);
+    }
+    agent = agentValue;
+    parsedArgs.splice(agentIdx, 2);
+  }
+
   const allowedArgs = new Set([...ONBOARD_BASE_ARGS, noticeAcceptFlag]);
   const unknownArgs = parsedArgs.filter((arg) => !allowedArgs.has(arg));
   if (unknownArgs.length > 0) {
@@ -76,6 +102,8 @@ export function parseOnboardArgs(
     fromDockerfile,
     acceptThirdPartySoftware:
       parsedArgs.includes(noticeAcceptFlag) || String(deps.env[noticeAcceptEnv] || "") === "1",
+    agent,
+    dangerouslySkipPermissions: parsedArgs.includes("--dangerously-skip-permissions"),
   };
 }
 

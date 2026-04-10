@@ -30,6 +30,8 @@ describe("onboard command", () => {
       recreateSandbox: false,
       fromDockerfile: null,
       acceptThirdPartySoftware: true,
+      agent: null,
+      dangerouslySkipPermissions: false,
     });
   });
 
@@ -53,6 +55,8 @@ describe("onboard command", () => {
       recreateSandbox: false,
       fromDockerfile: null,
       acceptThirdPartySoftware: true,
+      agent: null,
+      dangerouslySkipPermissions: false,
     });
   });
 
@@ -75,6 +79,8 @@ describe("onboard command", () => {
       recreateSandbox: false,
       fromDockerfile: null,
       acceptThirdPartySoftware: false,
+      agent: null,
+      dangerouslySkipPermissions: false,
     });
   });
 
@@ -96,6 +102,8 @@ describe("onboard command", () => {
     expect(runOnboard).not.toHaveBeenCalled();
     expect(lines.join("\n")).toContain("Usage: nemoclaw onboard");
     expect(lines.join("\n")).toContain("--from <Dockerfile>");
+    expect(lines.join("\n")).toContain("--agent <name>");
+    expect(lines.join("\n")).toContain("--dangerously-skip-permissions");
   });
 
   it("parses --from <Dockerfile>", () => {
@@ -118,6 +126,8 @@ describe("onboard command", () => {
       recreateSandbox: false,
       fromDockerfile: "/tmp/Custom.Dockerfile",
       acceptThirdPartySoftware: false,
+      agent: null,
+      dangerouslySkipPermissions: false,
     });
   });
 
@@ -158,6 +168,52 @@ describe("onboard command", () => {
     expect(errors.join("\n")).toContain("Usage: nemoclaw onboard");
   });
 
+  it("parses --agent and --dangerously-skip-permissions", () => {
+    expect(
+      parseOnboardArgs(
+        ["--agent", "openclaw", "--dangerously-skip-permissions"],
+        "--yes-i-accept-third-party-software",
+        "NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE",
+        {
+          env: {},
+          listAgents: () => ["openclaw", "hermes"],
+          error: () => {},
+          exit: ((code: number) => {
+            throw new Error(String(code));
+          }) as never,
+        },
+      ),
+    ).toEqual({
+      nonInteractive: false,
+      resume: false,
+      recreateSandbox: false,
+      fromDockerfile: null,
+      acceptThirdPartySoftware: false,
+      agent: "openclaw",
+      dangerouslySkipPermissions: true,
+    });
+  });
+
+  it("rejects unknown --agent values", () => {
+    const errors: string[] = [];
+    expect(() =>
+      parseOnboardArgs(
+        ["--agent", "bogus"],
+        "--yes-i-accept-third-party-software",
+        "NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE",
+        {
+          env: {},
+          listAgents: () => ["openclaw", "hermes"],
+          error: (message = "") => errors.push(message),
+          exit: ((code: number) => {
+            throw new Error(`exit:${code}`);
+          }) as never,
+        },
+      ),
+    ).toThrow("exit:1");
+    expect(errors.join("\n")).toContain("Unknown agent 'bogus'");
+  });
+
   it("prints the setup-spark deprecation text before delegating", async () => {
     const lines: string[] = [];
     const runOnboard = vi.fn(async () => {});
@@ -183,6 +239,8 @@ describe("onboard command", () => {
       recreateSandbox: false,
       fromDockerfile: null,
       acceptThirdPartySoftware: false,
+      agent: null,
+      dangerouslySkipPermissions: false,
     });
   });
 
