@@ -40,7 +40,27 @@ export function getVersion(opts: VersionOptions = {}): string {
   }
 
   // 3. Fallback to package.json
-  const raw = readFileSync(join(root, "package.json"), "utf-8");
-  const pkg = JSON.parse(raw) as { version: string };
+  const pkgPath = join(root, "package.json");
+  let raw: string;
+  try {
+    raw = readFileSync(pkgPath, "utf-8");
+  } catch (err) {
+    throw new Error(
+      `NemoClaw: cannot read version — package.json not found at ${pkgPath}`,
+      { cause: err },
+    );
+  }
+  let pkg: { version?: string };
+  try {
+    pkg = JSON.parse(raw) as { version?: string };
+  } catch (err) {
+    throw new Error(
+      `NemoClaw: cannot read version — package.json at ${pkgPath} is not valid JSON`,
+      { cause: err },
+    );
+  }
+  if (!pkg.version) {
+    throw new Error(`NemoClaw: package.json at ${pkgPath} has no "version" field`);
+  }
   return pkg.version;
 }
