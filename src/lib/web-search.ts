@@ -48,7 +48,12 @@ export function buildWebSearchDockerConfig(
   const provider: WebSearchProvider = config.provider ?? DEFAULT_WEB_SEARCH_PROVIDER;
 
   if (provider === "searxng") {
-    const instanceUrl = config.searxngUrl || searxngUrl || "";
+    const instanceUrl = (config.searxngUrl ?? searxngUrl ?? "").trim();
+    if (!instanceUrl) {
+      throw new Error(
+        `Web search provider "searxng" requires a non-empty searxngUrl (config or ${SEARXNG_URL_ENV}).`,
+      );
+    }
     return encodeDockerJsonArg({
       provider: "searxng",
       fetchEnabled: true,
